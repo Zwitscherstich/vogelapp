@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function NeuePage() {
@@ -18,6 +18,7 @@ export default function NeuePage() {
   const [speichern, setSpeichern] = useState(false);
   const [erfolg, setErfolg] = useState(false);
   const [fehler, setFehler] = useState("");
+  const suchfeldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function ladeVogelarten() {
@@ -39,6 +40,7 @@ export default function NeuePage() {
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
     setSuchbegriff("");
+    setTimeout(() => suchfeldRef.current?.focus(), 0);
   }
 
   async function handleSpeichern() {
@@ -148,6 +150,7 @@ export default function NeuePage() {
         <div>
           <label className="block text-sm font-medium mb-1">Vogelarten</label>
           <input
+            ref={suchfeldRef}
             type="text"
             value={suchbegriff}
             onChange={(e) => setSuchbegriff(e.target.value)}

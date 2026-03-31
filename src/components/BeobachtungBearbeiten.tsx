@@ -3,6 +3,11 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 
+interface FotoEintrag {
+  id: number;
+  url: string;
+}
+
 interface Props {
   beobachtungId: number;
   datum: string;
@@ -27,6 +32,8 @@ export default function BeobachtungBearbeiten({
   );
   const [ausgewaehlteArten, setAusgewaehlteArten] = useState<number[]>([]);
   const [suchbegriff, setSuchbegriff] = useState("");
+  const [vorhandeneFotos, setVorhandeneFotos] = useState<FotoEintrag[]>([]);
+  const [neueFotos, setNeueFotos] = useState<File[]>([]);
   const [speichern, setSpeichern] = useState(false);
   const [fehler, setFehler] = useState("");
 
@@ -38,15 +45,20 @@ export default function BeobachtungBearbeiten({
         .order("name");
       if (data) {
         setVogelarten(data);
-        // Vorhandene Arten vorauswählen
         const vorhandeneIds = data
           .filter((a) => vorhandeneArten.includes(a.name))
           .map((a) => a.id);
         setAusgewaehlteArten(vorhandeneIds);
       }
+
+      const { data: fotos } = await supabase
+        .from("fotos")
+        .select("id, url")
+        .eq("beobachtung_id", beobachtungId);
+      if (fotos) setVorhandeneFotos(fotos);
     }
     laden();
-  }, [vorhandeneArten]);
+  }, [vorhandeneArten, beobachtungId]);
 
   const gefilterteArten = vogelarten.filter((art) =>
     art.name.toLowerCase().includes(suchbegriff.toLowerCase())
@@ -96,6 +108,23 @@ export default function BeobachtungBearbeiten({
         .insert(artEintraege);
 
       if (insertError) throw insertError;
+
+      // Neue Fotos hochladen
+      for (const foto of neueFotos) {
+        const dateiname = `${beobachtungId}/${Date.now()}-${foto.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from("fotos")
+          .upload(dateiname, foto);
+        if (uploadError) throw uploadError;
+
+        const {
+          data: { publicUrl },
+        } = supabase.storage.from("fotos").getPublicUrl(dateiname);
+
+        await supabase
+          .from("fotos")
+          .insert({ beobachtung_id: beobachtungId, url: publicUrl });
+      }
 
       onGespeichert();
     } catch (e: unknown) {
@@ -212,6 +241,54 @@ export default function BeobachtungBearbeiten({
             </div>
           )}
         </div>
+      </div>
+
+      {/* Fotos */}
+      <div>
+        <label className="block text-sm font-medium mb-1">Fotos</label>
+
+        {vorhandeneFotos.length > 0 && (
+          <div className="flex gap-2 flex-wrap mb-2">
+            {vorhandeneFotos.map((foto) => (
+              <div key={foto.id} className="relative group">
+                <img
+                  src={foto.url}
+                  alt="Foto"
+                  className="h-20 w-20 object-cover rounded border border-stone-200"
+                />
+                <button
+                  onClick={async () => {
+                    await supabase.from("fotos").delete().eq("id", foto.id);
+                    setVorhandeneFotos((prev) =>
+                      prev.filter((f) => f.id !== foto.id)
+                    );
+                  }}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity"
+                  title="Foto löschen"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <input
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={(e) => {
+            if (e.target.files) {
+              setNeueFotos(Array.from(e.target.files));
+            }
+          }}
+          className="text-sm"
+        />
+        {neueFotos.length > 0 && (
+          <p className="text-sm text-stone-500 mt-1">
+            {neueFotos.length} neue(s) Foto(s) ausgewählt
+          </p>
+        )}
       </div>
 
       <div className="flex gap-2">
