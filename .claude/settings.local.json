@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(export PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(npx create-next-app@latest . --typescript --tailwind --eslint --app --src-dir --import-alias \"@/*\" --use-npm --no-turbopack)",
+      "Bash(npm install:*)",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__list_organizations",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__list_projects",
+      "mcp__2f4f22df-4f1c-493d-bd2a-f19f7a7dbc97__list_teams",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__get_cost",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__confirm_cost",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__create_project",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__apply_migration",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__get_project_url",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__get_publishable_keys",
+      "mcp__4c1ec123-3da9-463e-936b-52631c36079f__execute_sql",
+      "Bash(npm run:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)"
+    ]
+  }
+}
