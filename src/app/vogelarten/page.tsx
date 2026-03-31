@@ -11,6 +11,7 @@ export default function VogelartenPage() {
   const [laden, setLaden] = useState(true);
   const [fehler, setFehler] = useState("");
   const [erfolg, setErfolg] = useState("");
+  const [loeschenId, setLoeschenId] = useState<number | null>(null);
 
   async function ladeVogelarten() {
     const { data } = await supabase
@@ -100,15 +101,54 @@ export default function VogelartenPage() {
           <div className="p-3 border-b border-stone-200 text-sm text-stone-500">
             {vogelarten.length} Vogelarten in der Liste
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-0">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-0">
             {vogelarten.map((art) => (
               <div
                 key={art.id}
-                className="px-3 py-1.5 text-sm border-b border-stone-100"
+                className="px-3 py-1.5 text-sm border-b border-stone-100 flex items-center justify-between group"
               >
-                {art.name}
+                <span>{art.name}</span>
+                <button
+                  onClick={() => setLoeschenId(art.id)}
+                  className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-100 transition-opacity text-xs px-1"
+                  title="Entfernen"
+                >
+                  ×
+                </button>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Lösch-Bestätigung */}
+      {loeschenId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl">
+            <h3 className="text-lg font-semibold mb-2">Vogelart entfernen?</h3>
+            <p className="text-sm text-stone-600 mb-4">
+              &quot;{vogelarten.find((a) => a.id === loeschenId)?.name}&quot; wird
+              aus der Liste entfernt. Bestehende Beobachtungen mit dieser Art
+              bleiben erhalten.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setLoeschenId(null)}
+                className="px-4 py-2 rounded text-sm bg-stone-200 text-stone-700 hover:bg-stone-300 transition-colors"
+              >
+                Abbrechen
+              </button>
+              <button
+                onClick={async () => {
+                  await supabase.from("vogelarten").delete().eq("id", loeschenId);
+                  setLoeschenId(null);
+                  await ladeVogelarten();
+                }}
+                className="px-4 py-2 rounded text-sm bg-red-600 text-white hover:bg-red-700 transition-colors"
+              >
+                Ja, entfernen
+              </button>
+            </div>
           </div>
         </div>
       )}

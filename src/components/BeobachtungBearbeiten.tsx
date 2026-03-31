@@ -56,6 +56,7 @@ export default function BeobachtungBearbeiten({
     setAusgewaehlteArten((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
+    setSuchbegriff("");
   }
 
   async function handleSpeichern() {
