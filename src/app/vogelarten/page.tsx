@@ -71,7 +71,7 @@ export default function VogelartenPage() {
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
             value={neueArt}
@@ -85,7 +85,7 @@ export default function VogelartenPage() {
           />
           <button
             onClick={artHinzufuegen}
-            className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 transition-colors"
+            className="bg-emerald-600 text-white px-4 py-2 rounded hover:bg-emerald-700 transition-colors whitespace-nowrap"
           >
             Hinzufügen
           </button>

@@ -191,10 +191,32 @@ export default function NeuePage() {
                 {art.name}
               </button>
             ))}
-            {gefilterteArten.length === 0 && (
-              <p className="px-3 py-2 text-sm text-stone-500">
-                Keine Vogelart gefunden.
-              </p>
+            {gefilterteArten.length === 0 && suchbegriff.trim() && (
+              <div className="px-3 py-2">
+                <p className="text-sm text-stone-500 mb-1">
+                  Keine Vogelart gefunden.
+                </p>
+                <button
+                  onClick={async () => {
+                    const name = suchbegriff.trim();
+                    const { data, error } = await supabase
+                      .from("vogelarten")
+                      .insert({ name })
+                      .select("id, name")
+                      .single();
+                    if (!error && data) {
+                      setVogelarten((prev) =>
+                        [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
+                      );
+                      toggleArt(data.id);
+                      setSuchbegriff("");
+                    }
+                  }}
+                  className="text-sm text-emerald-700 font-medium hover:text-emerald-900"
+                >
+                  + &quot;{suchbegriff.trim()}&quot; als neue Vogelart hinzufügen
+                </button>
+              </div>
             )}
           </div>
         </div>
