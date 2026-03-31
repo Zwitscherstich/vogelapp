@@ -1,0 +1,80 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+
+export default function Navigation() {
+  const [offen, setOffen] = useState(false);
+  const pathname = usePathname();
+
+  const links = [
+    { href: "/", label: "Neue Beobachtung", icon: "+" },
+    { href: "/beobachtungen", label: "Beobachtungen", icon: "📋" },
+    { href: "/vogelarten", label: "Vogelarten", icon: "🐦" },
+  ];
+
+  return (
+    <nav className="bg-white border-b border-stone-200 shadow-sm">
+      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
+        <Link href="/" className="text-xl font-bold text-emerald-700">
+          🐦 Vogeltagebuch
+        </Link>
+
+        {/* Desktop-Menü */}
+        <div className="hidden sm:flex gap-4 text-sm">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              className={`transition-colors ${
+                pathname === link.href
+                  ? "text-emerald-700 font-medium"
+                  : "text-stone-600 hover:text-emerald-700"
+              }`}
+            >
+              {link.label}
+            </Link>
+          ))}
+        </div>
+
+        {/* Hamburger-Button (nur mobil) */}
+        <button
+          onClick={() => setOffen(!offen)}
+          className="sm:hidden flex flex-col gap-1.5 p-2"
+          aria-label="Menü öffnen"
+        >
+          <span
+            className={`block w-6 h-0.5 bg-stone-700 transition-transform ${offen ? "rotate-45 translate-y-2" : ""}`}
+          />
+          <span
+            className={`block w-6 h-0.5 bg-stone-700 transition-opacity ${offen ? "opacity-0" : ""}`}
+          />
+          <span
+            className={`block w-6 h-0.5 bg-stone-700 transition-transform ${offen ? "-rotate-45 -translate-y-2" : ""}`}
+          />
+        </button>
+      </div>
+
+      {/* Mobiles Dropdown-Menü */}
+      {offen && (
+        <div className="sm:hidden border-t border-stone-200 bg-white">
+          {links.map((link) => (
+            <Link
+              key={link.href}
+              href={link.href}
+              onClick={() => setOffen(false)}
+              className={`block px-4 py-3 text-sm border-b border-stone-100 transition-colors ${
+                pathname === link.href
+                  ? "bg-emerald-50 text-emerald-700 font-medium"
+                  : "text-stone-600 hover:bg-stone-50"
+              }`}
+            >
+              {link.icon} {link.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </nav>
+  );
+}
