@@ -12,6 +12,7 @@ export default function Navigation() {
     { href: "/", label: "Neue Beobachtung", icon: "+" },
     { href: "/beobachtungen", label: "Beobachtungen", icon: "📋" },
     { href: "/vogelarten", label: "Vogelarten", icon: "🐦" },
+    { href: "/dashboard", label: "Dashboard", icon: "📊" },
   ];
 
   return (
