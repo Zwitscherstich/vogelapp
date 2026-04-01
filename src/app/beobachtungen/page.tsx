@@ -24,6 +24,7 @@ export default function BeobachtungenPage() {
   const [grossesBild, setGrossesBild] = useState<string | null>(null);
   const [bearbeitenId, setBearbeitenId] = useState<number | null>(null);
   const [loeschenId, setLoeschenId] = useState<number | null>(null);
+  const [exportiert, setExportiert] = useState<number | null>(null);
 
   const ladeBeobachtungen = useCallback(async () => {
     // Alle drei Abfragen parallel statt N+1 Einzelabfragen
@@ -132,6 +133,27 @@ export default function BeobachtungenPage() {
     });
   }
 
+  async function handleExport(b: Beobachtung) {
+    const text = [
+      `Vogelbeobachtung vom ${formatDatum(b.datum)}`,
+      `Ort: ${b.ort}`,
+      `Vogelarten: ${b.vogelarten.join(", ")}`,
+    ].join("\n");
+
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: "Vogelbeobachtung", text });
+        return;
+      } catch {
+        // Teilen abgebrochen – Fallback auf Zwischenablage
+      }
+    }
+
+    await navigator.clipboard.writeText(text);
+    setExportiert(b.id);
+    setTimeout(() => setExportiert(null), 2000);
+  }
+
   async function handleLoeschen(id: number) {
     await supabase.from("beobachtung_vogelarten").delete().eq("beobachtung_id", id);
     await supabase.from("fotos").delete().eq("beobachtung_id", id);
@@ -215,6 +237,13 @@ export default function BeobachtungenPage() {
                           {ansicht !== "ort" && <span>📍 {b.ort}</span>}
                         </div>
                         <div className="flex gap-1 shrink-0 ml-2">
+                          <button
+                            onClick={() => handleExport(b)}
+                            className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded hover:bg-blue-100 hover:text-blue-700 transition-colors"
+                            title="Exportieren / Teilen"
+                          >
+                            {exportiert === b.id ? "✓" : "📤"}
+                          </button>
                           <button
                             onClick={() => setBearbeitenId(b.id)}
                             className="text-xs bg-stone-100 text-stone-600 px-2 py-1 rounded hover:bg-amber-100 hover:text-amber-700 transition-colors"
