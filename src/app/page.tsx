@@ -19,6 +19,7 @@ export default function NeuePage() {
   const [erfolg, setErfolg] = useState(false);
   const [fehler, setFehler] = useState("");
   const suchfeldRef = useRef<HTMLInputElement>(null);
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function ladeVogelarten() {
@@ -231,21 +232,43 @@ export default function NeuePage() {
             Fotos (optional)
           </label>
           <input
+            ref={fotoInputRef}
             type="file"
             accept="image/*"
             multiple
             onChange={(e) => {
               if (e.target.files) {
-                setFotos(Array.from(e.target.files));
+                setFotos((prev) => [...prev, ...Array.from(e.target.files!)]);
               }
             }}
-            className="text-sm"
+            className="hidden"
           />
           {fotos.length > 0 && (
-            <p className="text-sm text-stone-500 mt-1">
-              {fotos.length} Foto(s) ausgewählt
-            </p>
+            <div className="flex gap-2 flex-wrap mb-2">
+              {fotos.map((foto, i) => (
+                <div key={i} className="relative group">
+                  <img
+                    src={URL.createObjectURL(foto)}
+                    alt="Vorschau"
+                    className="h-20 w-20 object-cover rounded border border-stone-200"
+                  />
+                  <button
+                    onClick={() => setFotos((prev) => prev.filter((_, j) => j !== i))}
+                    className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
+          <button
+            type="button"
+            onClick={() => fotoInputRef.current?.click()}
+            className="text-sm bg-stone-100 text-stone-700 px-3 py-2 rounded hover:bg-stone-200 transition-colors"
+          >
+            📷 Fotos auswählen
+          </button>
         </div>
 
         {/* Speichern */}

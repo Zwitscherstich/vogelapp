@@ -24,39 +24,48 @@ export default function BeobachtungenPage() {
   const [loeschenId, setLoeschenId] = useState<number | null>(null);
 
   const ladeBeobachtungen = useCallback(async () => {
-    const { data: beob } = await supabase
-      .from("beobachtungen")
-      .select("id, datum, ort")
-      .order("datum", { ascending: false });
+    // Alle drei Abfragen parallel statt N+1 Einzelabfragen
+    const [beobResult, artenResult, fotosResult] = await Promise.all([
+      supabase
+        .from("beobachtungen")
+        .select("id, datum, ort")
+        .order("datum", { ascending: false }),
+      supabase
+        .from("beobachtung_vogelarten")
+        .select("beobachtung_id, vogelarten(name)"),
+      supabase
+        .from("fotos")
+        .select("beobachtung_id, url"),
+    ]);
 
+    const beob = beobResult.data;
     if (!beob) {
       setLaden(false);
       return;
     }
 
-    const ergebnisse: Beobachtung[] = [];
-
-    for (const b of beob) {
-      const { data: arten } = await supabase
-        .from("beobachtung_vogelarten")
-        .select("vogelart_id, vogelarten(name)")
-        .eq("beobachtung_id", b.id);
-
-      const { data: fotos } = await supabase
-        .from("fotos")
-        .select("url")
-        .eq("beobachtung_id", b.id);
-
-      ergebnisse.push({
-        ...b,
-        vogelarten:
-          arten?.map(
-            (a: Record<string, unknown>) =>
-              (a.vogelarten as { name: string })?.name ?? ""
-          ) ?? [],
-        fotos: fotos?.map((f) => f.url) ?? [],
-      });
+    // Vogelarten nach Beobachtung gruppieren
+    const artenMap = new Map<number, string[]>();
+    for (const a of artenResult.data ?? []) {
+      const name = (a.vogelarten as unknown as { name: string })?.name ?? "";
+      const liste = artenMap.get(a.beobachtung_id) ?? [];
+      liste.push(name);
+      artenMap.set(a.beobachtung_id, liste);
     }
+
+    // Fotos nach Beobachtung gruppieren
+    const fotosMap = new Map<number, string[]>();
+    for (const f of fotosResult.data ?? []) {
+      const liste = fotosMap.get(f.beobachtung_id) ?? [];
+      liste.push(f.url);
+      fotosMap.set(f.beobachtung_id, liste);
+    }
+
+    const ergebnisse: Beobachtung[] = beob.map((b) => ({
+      ...b,
+      vogelarten: artenMap.get(b.id) ?? [],
+      fotos: fotosMap.get(b.id) ?? [],
+    }));
 
     setBeobachtungen(ergebnisse);
     setLaden(false);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 interface FotoEintrag {
@@ -36,6 +36,7 @@ export default function BeobachtungBearbeiten({
   const [neueFotos, setNeueFotos] = useState<File[]>([]);
   const [speichern, setSpeichern] = useState(false);
   const [fehler, setFehler] = useState("");
+  const fotoInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     async function laden() {
@@ -274,21 +275,43 @@ export default function BeobachtungBearbeiten({
         )}
 
         <input
+          ref={fotoInputRef}
           type="file"
           accept="image/*"
           multiple
           onChange={(e) => {
             if (e.target.files) {
-              setNeueFotos(Array.from(e.target.files));
+              setNeueFotos((prev) => [...prev, ...Array.from(e.target.files!)]);
             }
           }}
-          className="text-sm"
+          className="hidden"
         />
         {neueFotos.length > 0 && (
-          <p className="text-sm text-stone-500 mt-1">
-            {neueFotos.length} neue(s) Foto(s) ausgewählt
-          </p>
+          <div className="flex gap-2 flex-wrap mb-2">
+            {neueFotos.map((foto, i) => (
+              <div key={i} className="relative group">
+                <img
+                  src={URL.createObjectURL(foto)}
+                  alt="Vorschau"
+                  className="h-20 w-20 object-cover rounded border border-stone-200"
+                />
+                <button
+                  onClick={() => setNeueFotos((prev) => prev.filter((_, j) => j !== i))}
+                  className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
         )}
+        <button
+          type="button"
+          onClick={() => fotoInputRef.current?.click()}
+          className="text-sm bg-stone-100 text-stone-700 px-3 py-2 rounded hover:bg-stone-200 transition-colors"
+        >
+          📷 Fotos hinzufügen
+        </button>
       </div>
 
       <div className="flex gap-2">

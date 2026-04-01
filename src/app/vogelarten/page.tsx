@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
 export default function VogelartenPage() {
@@ -12,6 +12,7 @@ export default function VogelartenPage() {
   const [fehler, setFehler] = useState("");
   const [erfolg, setErfolg] = useState("");
   const [loeschenId, setLoeschenId] = useState<number | null>(null);
+  const eingabeRef = useRef<HTMLInputElement>(null);
 
   async function ladeVogelarten() {
     const { data } = await supabase
@@ -51,6 +52,7 @@ export default function VogelartenPage() {
     setErfolg(`"${name}" wurde hinzugefügt!`);
     setTimeout(() => setErfolg(""), 3000);
     await ladeVogelarten();
+    eingabeRef.current?.focus();
   }
 
   return (
@@ -74,6 +76,7 @@ export default function VogelartenPage() {
 
         <div className="flex flex-col sm:flex-row gap-2">
           <input
+            ref={eingabeRef}
             type="text"
             value={neueArt}
             onChange={(e) => {
