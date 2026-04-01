@@ -234,6 +234,83 @@ export default function DashboardPage() {
       monateDaten[0]
     );
 
+    // Aktuelle Serie (endet heute oder gestern)
+    const heuteStr = heute.toISOString().split("T")[0];
+    const gesternStr = new Date(heute.getTime() - 86400000)
+      .toISOString()
+      .split("T")[0];
+    let aktuelleStreakTage = 0;
+    if (einzigartigeDaten.includes(heuteStr) || einzigartigeDaten.includes(gesternStr)) {
+      const startDatum = einzigartigeDaten.includes(heuteStr) ? heuteStr : gesternStr;
+      aktuelleStreakTage = 1;
+      let checkDate = new Date(startDatum + "T00:00:00");
+      for (let i = einzigartigeDaten.indexOf(startDatum) - 1; i >= 0; i--) {
+        checkDate = new Date(checkDate.getTime() - 86400000);
+        if (einzigartigeDaten[i] === checkDate.toISOString().split("T")[0]) {
+          aktuelleStreakTage++;
+        } else {
+          break;
+        }
+      }
+    }
+
+    // Tage seit letzter Beobachtung
+    const letztesBeobDatum = einzigartigeDaten[einzigartigeDaten.length - 1];
+    const tageSeitLetzterBeob = letztesBeobDatum
+      ? Math.max(
+          0,
+          Math.floor(
+            (heute.getTime() - new Date(letztesBeobDatum + "T00:00:00").getTime()) /
+              86400000
+          )
+        )
+      : null;
+
+    // Saison-Vergleich: Arten pro Jahreszeit dieses Jahr
+    const saisonArten: Record<string, Set<string>> = {
+      "Winter": new Set(),
+      "Frühling": new Set(),
+      "Sommer": new Set(),
+      "Herbst": new Set(),
+    };
+    for (const b of beobDiesesJahr) {
+      const monat = new Date(b.datum + "T00:00:00").getMonth();
+      const saison = monat <= 1 || monat === 11 ? "Winter"
+        : monat <= 4 ? "Frühling"
+        : monat <= 7 ? "Sommer"
+        : "Herbst";
+      for (const art of b.vogelarten) saisonArten[saison].add(art);
+    }
+    const saisonDaten = [
+      { saison: "Winter", icon: "❄️", arten: saisonArten["Winter"].size },
+      { saison: "Frühling", icon: "🌸", arten: saisonArten["Frühling"].size },
+      { saison: "Sommer", icon: "☀️", arten: saisonArten["Sommer"].size },
+      { saison: "Herbst", icon: "🍂", arten: saisonArten["Herbst"].size },
+    ];
+
+    // Meilensteine
+    const meilensteine = [10, 25, 50, 75, 100, 150, 200, 300, 500];
+    const naechsterMeilensteinArten = meilensteine.find((m) => m > alleArten.size) ?? alleArten.size + 50;
+    const naechsterMeilensteinBeob = meilensteine.find((m) => m > beobachtungen.length) ?? beobachtungen.length + 50;
+
+    // Seltenste Arten (nur 1x gesehen)
+    const selten = [...artHaeufigkeit.entries()]
+      .filter(([, count]) => count === 1)
+      .map(([name]) => name)
+      .sort();
+
+    // Monatliche Neuentdeckungen dieses Jahr
+    const neuentdeckungenProMonat: { monat: string; anzahl: number }[] = [];
+    for (let m = 0; m < 12; m++) {
+      const d = new Date(diesesJahr, m, 1);
+      const key = `${diesesJahr}-${String(m + 1).padStart(2, "0")}`;
+      const label = d.toLocaleDateString("de-DE", { month: "short" });
+      const count = [...ersteSichtung.entries()].filter(
+        ([, datum]) => datum.startsWith(key)
+      ).length;
+      neuentdeckungenProMonat.push({ monat: label, anzahl: count });
+    }
+
     return {
       gesamtArten: alleArten.size,
       gesamtBeobachtungen: beobachtungen.length,
@@ -249,10 +326,17 @@ export default function DashboardPage() {
       topArten,
       topOrte,
       maxStreak,
+      aktuelleStreakTage,
+      tageSeitLetzterBeob,
       wochentagDaten,
       durchschnittArten,
       produktivsterMonat,
       laender: [...laender],
+      saisonDaten,
+      naechsterMeilensteinArten,
+      naechsterMeilensteinBeob,
+      selten,
+      neuentdeckungenProMonat,
     };
   }, [beobachtungen]);
 
@@ -373,55 +457,84 @@ export default function DashboardPage() {
         />
       </div>
 
+      {/* Motivations-Banner */}
+      <MotivationsBanner
+        tageSeitLetzterBeob={stats.tageSeitLetzterBeob}
+        aktuelleStreakTage={stats.aktuelleStreakTage}
+        tageSeitNeuentdeckung={stats.tageSeitNeuentdeckung}
+        neueArtenDiesesJahr={stats.neueArtenDiesesJahr}
+      />
+
       {/* Highlights-Leiste */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-5 text-white shadow-lg">
-          <p className="text-emerald-100 text-xs uppercase tracking-wide mb-1">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl p-4 text-white shadow-lg">
+          <p className="text-emerald-100 text-[10px] uppercase tracking-wide mb-1">
             Dieses Jahr
           </p>
-          <p className="text-3xl font-bold">{stats.neueArtenDiesesJahr}</p>
-          <p className="text-emerald-100 text-sm">
-            neue Arten entdeckt
+          <p className="text-2xl font-bold">{stats.neueArtenDiesesJahr}</p>
+          <p className="text-emerald-100 text-xs">
+            neue Arten
           </p>
-          <p className="text-emerald-200 text-xs mt-2">
-            {stats.beobDiesesJahr} Beobachtungen in {new Date().getFullYear()}
+          <p className="text-emerald-200 text-[10px] mt-1">
+            {stats.beobDiesesJahr} Beobachtungen
           </p>
         </div>
 
-        <div className="bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl p-5 text-white shadow-lg">
-          <p className="text-sky-100 text-xs uppercase tracking-wide mb-1">
+        <div className="bg-gradient-to-br from-sky-500 to-blue-600 rounded-xl p-4 text-white shadow-lg">
+          <p className="text-sky-100 text-[10px] uppercase tracking-wide mb-1">
             Neuentdeckung
           </p>
-          <p className="text-3xl font-bold">
+          <p className="text-2xl font-bold">
             {stats.tageSeitNeuentdeckung !== null
               ? stats.tageSeitNeuentdeckung === 0
                 ? "Heute!"
-                : `${stats.tageSeitNeuentdeckung} Tage`
+                : `${stats.tageSeitNeuentdeckung}d`
               : "–"}
           </p>
-          <p className="text-sky-100 text-sm">seit letzter neuer Art</p>
+          <p className="text-sky-100 text-xs">seit neuer Art</p>
           {stats.letzteNeuentdeckung && (
-            <p className="text-sky-200 text-xs mt-2">
+            <p className="text-sky-200 text-[10px] mt-1">
               am{" "}
               {new Date(
                 stats.letzteNeuentdeckung + "T00:00:00"
               ).toLocaleDateString("de-DE", {
                 day: "numeric",
-                month: "long",
-                year: "numeric",
+                month: "short",
               })}
             </p>
           )}
         </div>
 
-        <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-5 text-white shadow-lg">
-          <p className="text-amber-100 text-xs uppercase tracking-wide mb-1">
-            Rekorde
+        <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-4 text-white shadow-lg">
+          <p className="text-amber-100 text-[10px] uppercase tracking-wide mb-1">
+            Aktuelle Serie
           </p>
-          <p className="text-3xl font-bold">{stats.maxStreak} Tage</p>
-          <p className="text-amber-100 text-sm">längste Serie</p>
-          <p className="text-amber-200 text-xs mt-2">
-            ∅ {stats.durchschnittArten.toFixed(1)} Arten pro Beobachtung
+          <p className="text-2xl font-bold">
+            {stats.aktuelleStreakTage > 0
+              ? `${stats.aktuelleStreakTage}d 🔥`
+              : "0d"}
+          </p>
+          <p className="text-amber-100 text-xs">
+            {stats.aktuelleStreakTage > 0 ? "am Laufen!" : "Starte heute!"}
+          </p>
+          <p className="text-amber-200 text-[10px] mt-1">
+            Rekord: {stats.maxStreak} Tage
+          </p>
+        </div>
+
+        <div className="bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl p-4 text-white shadow-lg">
+          <p className="text-violet-100 text-[10px] uppercase tracking-wide mb-1">
+            Letzte Beobachtung
+          </p>
+          <p className="text-2xl font-bold">
+            {stats.tageSeitLetzterBeob !== null
+              ? stats.tageSeitLetzterBeob === 0
+                ? "Heute"
+                : `${stats.tageSeitLetzterBeob}d`
+              : "–"}
+          </p>
+          <p className="text-violet-100 text-xs">
+            ∅ {stats.durchschnittArten.toFixed(1)} Arten/Beob.
           </p>
         </div>
       </div>
@@ -612,6 +725,124 @@ export default function DashboardPage() {
         </div>
       </div>
 
+      {/* Neuentdeckungen dieses Jahr + Saison */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Neuentdeckungen pro Monat */}
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+          <h2 className="font-semibold text-stone-800 mb-4">
+            Neuentdeckungen {new Date().getFullYear()}
+          </h2>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={stats.neuentdeckungenProMonat}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e7e5e4" />
+              <XAxis
+                dataKey="monat"
+                tick={{ fontSize: 11, fill: "#78716c" }}
+                axisLine={{ stroke: "#d6d3d1" }}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: "#78716c" }}
+                axisLine={{ stroke: "#d6d3d1" }}
+                allowDecimals={false}
+              />
+              <Tooltip
+                contentStyle={{
+                  borderRadius: "8px",
+                  border: "1px solid #e7e5e4",
+                  fontSize: "13px",
+                }}
+                formatter={(value) => [String(value), "Neue Arten"]}
+              />
+              <Bar
+                dataKey="anzahl"
+                fill="#7c3aed"
+                radius={[4, 4, 0, 0]}
+                maxBarSize={40}
+              />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Saison-Vergleich */}
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+          <h2 className="font-semibold text-stone-800 mb-4">
+            Arten pro Jahreszeit {new Date().getFullYear()}
+          </h2>
+          <div className="grid grid-cols-2 gap-3 mt-2">
+            {stats.saisonDaten.map((s) => {
+              const maxSaison = Math.max(
+                ...stats.saisonDaten.map((d) => d.arten),
+                1
+              );
+              const prozent = (s.arten / maxSaison) * 100;
+              return (
+                <div
+                  key={s.saison}
+                  className="bg-stone-50 rounded-lg p-4 text-center"
+                >
+                  <p className="text-2xl mb-1">{s.icon}</p>
+                  <p className="text-2xl font-bold text-stone-800">
+                    {s.arten}
+                  </p>
+                  <p className="text-xs text-stone-500 mb-2">{s.saison}</p>
+                  <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-emerald-500 rounded-full transition-all"
+                      style={{ width: `${prozent}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Meilensteine */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+        <h2 className="font-semibold text-stone-800 mb-4">
+          Nächste Meilensteine
+        </h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <MeilensteinBar
+            label="Vogelarten"
+            aktuell={stats.gesamtArten}
+            ziel={stats.naechsterMeilensteinArten}
+            icon="🐦"
+            farbe="#059669"
+          />
+          <MeilensteinBar
+            label="Beobachtungen"
+            aktuell={stats.gesamtBeobachtungen}
+            ziel={stats.naechsterMeilensteinBeob}
+            icon="📋"
+            farbe="#0284c7"
+          />
+        </div>
+      </div>
+
+      {/* Seltenheiten */}
+      {stats.selten.length > 0 && (
+        <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+          <h2 className="font-semibold text-stone-800 mb-1">
+            Seltenheiten — nur 1× gesehen
+          </h2>
+          <p className="text-xs text-stone-400 mb-3">
+            Halte Ausschau nach diesen Arten und bestätige deine Sichtung!
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {stats.selten.map((art) => (
+              <span
+                key={art}
+                className="bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-full text-sm"
+              >
+                ⭐ {art}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Produktivster Monat */}
       {stats.produktivsterMonat && stats.produktivsterMonat.anzahl > 0 && (
         <div className="bg-stone-50 border border-stone-200 rounded-xl p-4 text-center text-sm text-stone-600">
@@ -626,6 +857,113 @@ export default function DashboardPage() {
           .
         </div>
       )}
+    </div>
+  );
+}
+
+function MotivationsBanner({
+  tageSeitLetzterBeob,
+  aktuelleStreakTage,
+  tageSeitNeuentdeckung,
+  neueArtenDiesesJahr,
+}: {
+  tageSeitLetzterBeob: number | null;
+  aktuelleStreakTage: number;
+  tageSeitNeuentdeckung: number | null;
+  neueArtenDiesesJahr: number;
+}) {
+  let nachricht = "";
+  let icon = "";
+  let gradient = "";
+
+  if (tageSeitLetzterBeob === 0) {
+    if (aktuelleStreakTage >= 3) {
+      nachricht = `${aktuelleStreakTage} Tage in Folge — du bist on fire! Kannst du den Rekord knacken?`;
+      icon = "🔥";
+      gradient = "from-orange-500 to-red-500";
+    } else {
+      nachricht = "Stark! Du warst heute schon draußen. Weiter so!";
+      icon = "💪";
+      gradient = "from-emerald-500 to-green-600";
+    }
+  } else if (tageSeitLetzterBeob !== null && tageSeitLetzterBeob <= 2) {
+    nachricht = "Perfektes Wetter für eine Runde Vogelbeobachtung?";
+    icon = "🌤️";
+    gradient = "from-sky-400 to-blue-500";
+  } else if (tageSeitLetzterBeob !== null && tageSeitLetzterBeob <= 7) {
+    nachricht = `Schon ${tageSeitLetzterBeob} Tage her — die Vögel vermissen dich!`;
+    icon = "🐦";
+    gradient = "from-amber-400 to-orange-500";
+  } else {
+    nachricht = "Zeit für ein Comeback! Da draußen warten neue Entdeckungen.";
+    icon = "🌅";
+    gradient = "from-purple-500 to-pink-500";
+  }
+
+  if (tageSeitNeuentdeckung === 0) {
+    nachricht = "Glückwunsch zur neuen Art! Wer weiß was du noch findest?";
+    icon = "🎉";
+    gradient = "from-emerald-400 to-teal-500";
+  }
+
+  return (
+    <div
+      className={`bg-gradient-to-r ${gradient} rounded-xl p-4 text-white shadow-lg flex items-center gap-3`}
+    >
+      <span className="text-3xl shrink-0">{icon}</span>
+      <div>
+        <p className="font-medium text-sm">{nachricht}</p>
+        {neueArtenDiesesJahr > 0 && (
+          <p className="text-white/70 text-xs mt-0.5">
+            {neueArtenDiesesJahr} neue Arten in {new Date().getFullYear()} entdeckt
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function MeilensteinBar({
+  label,
+  aktuell,
+  ziel,
+  icon,
+  farbe,
+}: {
+  label: string;
+  aktuell: number;
+  ziel: number;
+  icon: string;
+  farbe: string;
+}) {
+  const prozent = Math.min((aktuell / ziel) * 100, 100);
+  const fehlend = ziel - aktuell;
+
+  return (
+    <div className="bg-stone-50 rounded-lg p-4">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-sm font-medium text-stone-700">
+          {icon} {label}
+        </span>
+        <span className="text-xs text-stone-500">
+          {aktuell} / {ziel}
+        </span>
+      </div>
+      <div className="h-3 bg-stone-200 rounded-full overflow-hidden mb-1.5">
+        <div
+          className="h-full rounded-full transition-all relative"
+          style={{ width: `${prozent}%`, backgroundColor: farbe }}
+        >
+          {prozent > 15 && (
+            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold">
+              {Math.round(prozent)}%
+            </span>
+          )}
+        </div>
+      </div>
+      <p className="text-xs text-stone-400">
+        Noch {fehlend} bis zum nächsten Meilenstein!
+      </p>
     </div>
   );
 }

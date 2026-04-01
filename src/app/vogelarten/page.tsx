@@ -141,8 +141,14 @@ export default function VogelartenPage() {
         <p className="text-stone-500">Lade Vogelarten...</p>
       ) : (
         <div className="bg-white border border-stone-200 rounded-lg shadow-sm">
-          <div className="p-3 border-b border-stone-200 text-sm text-stone-500">
-            {vogelarten.length} Vogelarten in der Liste
+          <div className="p-3 border-b border-stone-200 text-sm text-stone-500 flex items-center justify-between">
+            <span>{vogelarten.length} Vogelarten in der Liste</span>
+            {beobachteteArten.size > 0 && (
+              <span className="text-emerald-600 font-medium">
+                {beobachteteArten.size} von {vogelarten.length} beobachtet
+                ({Math.round((beobachteteArten.size / vogelarten.length) * 100)}%)
+              </span>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-0">
             {vogelarten.map((art) => {
