@@ -2,8 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import {
+  cacheVogelarten,
+  getCachedVogelarten,
+  saveOfflineBeobachtung,
+} from "@/lib/offlineDb";
 
 export default function NeuePage() {
+  const online = useOnlineStatus();
   const [datum, setDatum] = useState(() => {
     const heute = new Date();
     return heute.toISOString().split("T")[0];
@@ -13,6 +20,7 @@ export default function NeuePage() {
     []
   );
   const [ausgewaehlteArten, setAusgewaehlteArten] = useState<number[]>([]);
+  const [neueArtenNamen, setNeueArtenNamen] = useState<string[]>([]);
   const [suchbegriff, setSuchbegriff] = useState("");
   const [fotos, setFotos] = useState<File[]>([]);
   const [speichern, setSpeichern] = useState(false);
@@ -23,14 +31,22 @@ export default function NeuePage() {
 
   useEffect(() => {
     async function ladeVogelarten() {
-      const { data } = await supabase
-        .from("vogelarten")
-        .select("id, name")
-        .order("name");
-      if (data) setVogelarten(data);
+      if (online) {
+        const { data } = await supabase
+          .from("vogelarten")
+          .select("id, name")
+          .order("name");
+        if (data) {
+          setVogelarten(data);
+          await cacheVogelarten(data);
+        }
+      } else {
+        const cached = await getCachedVogelarten();
+        setVogelarten(cached);
+      }
     }
     ladeVogelarten();
-  }, []);
+  }, [online]);
 
   const gefilterteArten = vogelarten.filter((art) =>
     art.name.toLowerCase().includes(suchbegriff.toLowerCase())
@@ -45,7 +61,11 @@ export default function NeuePage() {
   }
 
   async function handleSpeichern() {
-    if (!datum || !ort || ausgewaehlteArten.length === 0) {
+    if (
+      !datum ||
+      !ort ||
+      (ausgewaehlteArten.length === 0 && neueArtenNamen.length === 0)
+    ) {
       setFehler("Bitte Datum, Ort und mindestens eine Vogelart angeben.");
       return;
     }
@@ -54,47 +74,73 @@ export default function NeuePage() {
     setFehler("");
 
     try {
-      // Beobachtung anlegen
-      const { data: beobachtung, error: beobError } = await supabase
-        .from("beobachtungen")
-        .insert({ datum, ort })
-        .select("id")
-        .single();
+      if (online) {
+        // --- Online: direkt in Supabase speichern ---
+        const { data: beobachtung, error: beobError } = await supabase
+          .from("beobachtungen")
+          .insert({ datum, ort })
+          .select("id")
+          .single();
 
-      if (beobError) throw beobError;
+        if (beobError) throw beobError;
 
-      // Vogelarten zur Beobachtung hinzufügen
-      const artEintraege = ausgewaehlteArten.map((vogelart_id) => ({
-        beobachtung_id: beobachtung.id,
-        vogelart_id,
-      }));
+        // Neue Vogelarten anlegen
+        const alleArtIds = [...ausgewaehlteArten];
+        for (const name of neueArtenNamen) {
+          const { data: neue, error } = await supabase
+            .from("vogelarten")
+            .insert({ name })
+            .select("id, name")
+            .single();
+          if (!error && neue) {
+            alleArtIds.push(neue.id);
+            setVogelarten((prev) =>
+              [...prev, neue].sort((a, b) => a.name.localeCompare(b.name))
+            );
+          }
+        }
 
-      const { error: artError } = await supabase
-        .from("beobachtung_vogelarten")
-        .insert(artEintraege);
+        const artEintraege = alleArtIds.map((vogelart_id) => ({
+          beobachtung_id: beobachtung.id,
+          vogelart_id,
+        }));
 
-      if (artError) throw artError;
+        const { error: artError } = await supabase
+          .from("beobachtung_vogelarten")
+          .insert(artEintraege);
 
-      // Fotos hochladen
-      for (const foto of fotos) {
-        const dateiname = `${beobachtung.id}/${Date.now()}-${foto.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("fotos")
-          .upload(dateiname, foto);
+        if (artError) throw artError;
 
-        if (uploadError) throw uploadError;
+        // Fotos hochladen
+        for (const foto of fotos) {
+          const dateiname = `${beobachtung.id}/${Date.now()}-${foto.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from("fotos")
+            .upload(dateiname, foto);
 
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("fotos").getPublicUrl(dateiname);
+          if (uploadError) throw uploadError;
 
-        await supabase
-          .from("fotos")
-          .insert({ beobachtung_id: beobachtung.id, url: publicUrl });
+          const {
+            data: { publicUrl },
+          } = supabase.storage.from("fotos").getPublicUrl(dateiname);
+
+          await supabase
+            .from("fotos")
+            .insert({ beobachtung_id: beobachtung.id, url: publicUrl });
+        }
+      } else {
+        // --- Offline: lokal speichern ---
+        await saveOfflineBeobachtung({
+          datum,
+          ort,
+          vogelartIds: ausgewaehlteArten,
+          neueVogelarten: neueArtenNamen,
+        });
       }
 
       setErfolg(true);
       setAusgewaehlteArten([]);
+      setNeueArtenNamen([]);
       setOrt("");
       setFotos([]);
       setSuchbegriff("");
@@ -113,7 +159,9 @@ export default function NeuePage() {
 
       {erfolg && (
         <div className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-4 py-3 rounded mb-4">
-          Beobachtung gespeichert!
+          {online
+            ? "Beobachtung gespeichert!"
+            : "Beobachtung offline gespeichert – wird synchronisiert sobald du online bist."}
         </div>
       )}
 
@@ -159,7 +207,7 @@ export default function NeuePage() {
             className="border border-stone-300 rounded px-3 py-2 w-full max-w-md mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
 
-          {ausgewaehlteArten.length > 0 && (
+          {(ausgewaehlteArten.length > 0 || neueArtenNamen.length > 0) && (
             <div className="flex flex-wrap gap-2 mb-2">
               {ausgewaehlteArten.map((id) => {
                 const art = vogelarten.find((a) => a.id === id);
@@ -178,6 +226,24 @@ export default function NeuePage() {
                   </span>
                 );
               })}
+              {neueArtenNamen.map((name, i) => (
+                <span
+                  key={`new-${i}`}
+                  className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm flex items-center gap-1"
+                >
+                  {name} (neu)
+                  <button
+                    onClick={() =>
+                      setNeueArtenNamen((prev) =>
+                        prev.filter((_, j) => j !== i)
+                      )
+                    }
+                    className="text-blue-600 hover:text-blue-800"
+                  >
+                    ×
+                  </button>
+                </span>
+              ))}
             </div>
           )}
 
@@ -204,22 +270,30 @@ export default function NeuePage() {
                 <button
                   onClick={async () => {
                     const name = suchbegriff.trim();
-                    const { data, error } = await supabase
-                      .from("vogelarten")
-                      .insert({ name })
-                      .select("id, name")
-                      .single();
-                    if (!error && data) {
-                      setVogelarten((prev) =>
-                        [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
-                      );
-                      toggleArt(data.id);
-                      setSuchbegriff("");
+                    if (online) {
+                      const { data, error } = await supabase
+                        .from("vogelarten")
+                        .insert({ name })
+                        .select("id, name")
+                        .single();
+                      if (!error && data) {
+                        setVogelarten((prev) =>
+                          [...prev, data].sort((a, b) =>
+                            a.name.localeCompare(b.name)
+                          )
+                        );
+                        toggleArt(data.id);
+                      }
+                    } else {
+                      setNeueArtenNamen((prev) => [...prev, name]);
                     }
+                    setSuchbegriff("");
+                    setTimeout(() => suchfeldRef.current?.focus(), 0);
                   }}
                   className="text-sm text-emerald-700 font-medium hover:text-emerald-900"
                 >
-                  + &quot;{suchbegriff.trim()}&quot; als neue Vogelart hinzufügen
+                  + &quot;{suchbegriff.trim()}&quot; als neue Vogelart
+                  hinzufügen
                 </button>
               </div>
             )}
@@ -229,7 +303,7 @@ export default function NeuePage() {
         {/* Fotos */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            Fotos (optional)
+            Fotos (optional){!online && " – nur mit Internet"}
           </label>
           <input
             ref={fotoInputRef}
@@ -253,7 +327,9 @@ export default function NeuePage() {
                     className="h-20 w-20 object-cover rounded border border-stone-200"
                   />
                   <button
-                    onClick={() => setFotos((prev) => prev.filter((_, j) => j !== i))}
+                    onClick={() =>
+                      setFotos((prev) => prev.filter((_, j) => j !== i))
+                    }
                     className="absolute -top-1.5 -right-1.5 bg-red-500 text-white rounded-full w-5 h-5 text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 max-sm:opacity-100 transition-opacity"
                   >
                     ×
@@ -265,7 +341,8 @@ export default function NeuePage() {
           <button
             type="button"
             onClick={() => fotoInputRef.current?.click()}
-            className="text-sm bg-stone-100 text-stone-700 px-3 py-2 rounded hover:bg-stone-200 transition-colors"
+            disabled={!online}
+            className="text-sm bg-stone-100 text-stone-700 px-3 py-2 rounded hover:bg-stone-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
             📷 Fotos auswählen
           </button>
@@ -277,7 +354,11 @@ export default function NeuePage() {
           disabled={speichern}
           className="bg-emerald-600 text-white px-6 py-2 rounded hover:bg-emerald-700 disabled:opacity-50 transition-colors"
         >
-          {speichern ? "Wird gespeichert..." : "Beobachtung speichern"}
+          {speichern
+            ? "Wird gespeichert..."
+            : online
+              ? "Beobachtung speichern"
+              : "Offline speichern"}
         </button>
       </div>
     </div>

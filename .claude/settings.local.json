@@ -17,7 +17,29 @@
       "Bash(npm run:*)",
       "Bash(git init:*)",
       "Bash(git add:*)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(git config:*)",
+      "Bash(gh auth:*)",
+      "mcp__2f4f22df-4f1c-493d-bd2a-f19f7a7dbc97__deploy_to_vercel",
+      "Bash(vercel --version)",
+      "Bash(export 'PATH=/c/Program Files/nodejs:$PATH')",
+      "Read(//c/Users/Philipp/vogelapp/$\\(npm root -g\\)/vercel/**)",
+      "Bash(npm root:*)",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/Philipp/AppData/Roaming/npm:$PATH\")",
+      "Bash(vercel login:*)",
+      "Bash(vercel deploy:*)",
+      "Bash(vercel env:*)",
+      "mcp__2f4f22df-4f1c-493d-bd2a-f19f7a7dbc97__get_deployment_build_logs",
+      "mcp__2f4f22df-4f1c-493d-bd2a-f19f7a7dbc97__list_deployments",
+      "Bash(export PATH=\"/c/Program Files/nodejs:/c/Users/Philipp/AppData/Roaming/npm:/c/Users/Philipp/scoop/shims:$PATH\")",
+      "Read(//c/Program Files/GitHub CLI//**)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" --version)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth status)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth login --web --git-protocol https)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo create vogelapp --public --source=. --remote=origin --push)",
+      "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth setup-git)",
+      "Bash(git push:*)",
+      "Bash(npm uninstall:*)"
     ]
   }
 }

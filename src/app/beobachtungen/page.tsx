@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import BeobachtungBearbeiten from "@/components/BeobachtungBearbeiten";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 interface Beobachtung {
   id: number;
@@ -13,6 +14,7 @@ interface Beobachtung {
 }
 
 export default function BeobachtungenPage() {
+  const online = useOnlineStatus();
   const [beobachtungen, setBeobachtungen] = useState<Beobachtung[]>([]);
   const [laden, setLaden] = useState(true);
   const [ansicht, setAnsicht] = useState<"datum" | "ort" | "vogelart">(
@@ -167,6 +169,12 @@ export default function BeobachtungenPage() {
           ))}
         </div>
       </div>
+
+      {!online && (
+        <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
+          Du bist offline. Beobachtungen können nur mit Internet angezeigt und bearbeitet werden.
+        </p>
+      )}
 
       {laden ? (
         <p className="text-stone-500">Lade Beobachtungen...</p>

@@ -2,8 +2,15 @@
 
 import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import {
+  cacheVogelarten,
+  getCachedVogelarten,
+  saveOfflineVogelart,
+} from "@/lib/offlineDb";
 
 export default function VogelartenPage() {
+  const online = useOnlineStatus();
   const [vogelarten, setVogelarten] = useState<{ id: number; name: string }[]>(
     []
   );
@@ -15,23 +22,31 @@ export default function VogelartenPage() {
   const eingabeRef = useRef<HTMLInputElement>(null);
 
   async function ladeVogelarten() {
-    const { data } = await supabase
-      .from("vogelarten")
-      .select("id, name")
-      .order("name");
-    if (data) setVogelarten(data);
+    if (online) {
+      const { data } = await supabase
+        .from("vogelarten")
+        .select("id, name")
+        .order("name");
+      if (data) {
+        setVogelarten(data);
+        await cacheVogelarten(data);
+      }
+    } else {
+      const cached = await getCachedVogelarten();
+      setVogelarten(cached);
+    }
     setLaden(false);
   }
 
   useEffect(() => {
     ladeVogelarten();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [online]);
 
   async function artHinzufuegen() {
     const name = neueArt.trim();
     if (!name) return;
 
-    // Prüfen ob die Art schon existiert
     const existiert = vogelarten.some(
       (a) => a.name.toLowerCase() === name.toLowerCase()
     );
@@ -40,18 +55,25 @@ export default function VogelartenPage() {
       return;
     }
 
-    const { error } = await supabase.from("vogelarten").insert({ name });
-
-    if (error) {
-      setFehler("Fehler beim Hinzufügen: " + error.message);
-      return;
+    if (online) {
+      const { error } = await supabase.from("vogelarten").insert({ name });
+      if (error) {
+        setFehler("Fehler beim Hinzufügen: " + error.message);
+        return;
+      }
+    } else {
+      await saveOfflineVogelart(name);
     }
 
     setNeueArt("");
     setFehler("");
-    setErfolg(`"${name}" wurde hinzugefügt!`);
+    setErfolg(
+      online
+        ? `"${name}" wurde hinzugefügt!`
+        : `"${name}" wird synchronisiert sobald du online bist.`
+    );
     setTimeout(() => setErfolg(""), 3000);
-    await ladeVogelarten();
+    if (online) await ladeVogelarten();
     eingabeRef.current?.focus();
   }
 
@@ -113,7 +135,8 @@ export default function VogelartenPage() {
                 <span>{art.name}</span>
                 <button
                   onClick={() => setLoeschenId(art.id)}
-                  className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-100 transition-opacity text-xs px-1"
+                  disabled={!online}
+                  className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-100 transition-opacity text-xs px-1 disabled:hidden"
                   title="Entfernen"
                 >
                   ×
@@ -130,9 +153,9 @@ export default function VogelartenPage() {
           <div className="bg-white rounded-lg p-6 max-w-sm w-full shadow-xl">
             <h3 className="text-lg font-semibold mb-2">Vogelart entfernen?</h3>
             <p className="text-sm text-stone-600 mb-4">
-              &quot;{vogelarten.find((a) => a.id === loeschenId)?.name}&quot; wird
-              aus der Liste entfernt. Bestehende Beobachtungen mit dieser Art
-              bleiben erhalten.
+              &quot;{vogelarten.find((a) => a.id === loeschenId)?.name}&quot;
+              wird aus der Liste entfernt. Bestehende Beobachtungen mit dieser
+              Art bleiben erhalten.
             </p>
             <div className="flex gap-2 justify-end">
               <button
@@ -143,7 +166,10 @@ export default function VogelartenPage() {
               </button>
               <button
                 onClick={async () => {
-                  await supabase.from("vogelarten").delete().eq("id", loeschenId);
+                  await supabase
+                    .from("vogelarten")
+                    .delete()
+                    .eq("id", loeschenId);
                   setLoeschenId(null);
                   await ladeVogelarten();
                 }}
