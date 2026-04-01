@@ -124,9 +124,13 @@ export default function DashboardPage() {
     const sichtungsDaten = [...ersteSichtung.values()].sort().reverse();
     const letzteNeuentdeckung = sichtungsDaten[0];
     const tageSeitNeuentdeckung = letzteNeuentdeckung
-      ? Math.floor(
-          (heute.getTime() - new Date(letzteNeuentdeckung).getTime()) /
-            (1000 * 60 * 60 * 24)
+      ? Math.max(
+          0,
+          Math.floor(
+            (heute.getTime() -
+              new Date(letzteNeuentdeckung + "T00:00:00").getTime()) /
+              (1000 * 60 * 60 * 24)
+          )
         )
       : null;
 
@@ -588,16 +592,16 @@ export default function DashboardPage() {
         <h2 className="font-semibold text-stone-800 mb-4">
           Aktivität nach Wochentag
         </h2>
-        <div className="flex items-end justify-around gap-2 h-32">
+        <div className="flex items-end justify-around gap-2" style={{ height: "140px" }}>
           {stats.wochentagDaten.map((w) => {
             const max = Math.max(...stats.wochentagDaten.map((d) => d.anzahl));
             const hoehe = max > 0 ? (w.anzahl / max) * 100 : 0;
             return (
-              <div key={w.tag} className="flex flex-col items-center gap-1 flex-1">
-                <span className="text-xs text-stone-500">{w.anzahl}</span>
+              <div key={w.tag} className="flex flex-col items-center gap-1 flex-1 h-full justify-end">
+                <span className="text-xs text-stone-500 font-medium">{w.anzahl}</span>
                 <div
-                  className="w-full max-w-[40px] bg-gradient-to-t from-emerald-500 to-emerald-300 rounded-t-md transition-all"
-                  style={{ height: `${Math.max(hoehe, 4)}%` }}
+                  className="w-full max-w-[40px] bg-gradient-to-t from-emerald-500 to-emerald-300 rounded-t-md"
+                  style={{ height: `${Math.max(hoehe, 3)}%`, minHeight: w.anzahl > 0 ? "6px" : "2px" }}
                 />
                 <span className="text-xs font-medium text-stone-600">
                   {w.tag}
