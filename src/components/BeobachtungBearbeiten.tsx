@@ -12,6 +12,7 @@ interface Props {
   beobachtungId: number;
   datum: string;
   ort: string;
+  land: string;
   vorhandeneArten: string[];
   onGespeichert: () => void;
   onAbbrechen: () => void;
@@ -21,12 +22,14 @@ export default function BeobachtungBearbeiten({
   beobachtungId,
   datum: startDatum,
   ort: startOrt,
+  land: startLand,
   vorhandeneArten,
   onGespeichert,
   onAbbrechen,
 }: Props) {
   const [datum, setDatum] = useState(startDatum);
   const [ort, setOrt] = useState(startOrt);
+  const [land, setLand] = useState(startLand);
   const [vogelarten, setVogelarten] = useState<{ id: number; name: string }[]>(
     []
   );
@@ -85,7 +88,7 @@ export default function BeobachtungBearbeiten({
       // Beobachtung aktualisieren
       const { error: updateError } = await supabase
         .from("beobachtungen")
-        .update({ datum, ort })
+        .update({ datum, ort, land })
         .eq("id", beobachtungId);
 
       if (updateError) throw updateError;
@@ -156,14 +159,26 @@ export default function BeobachtungBearbeiten({
             className="border border-stone-300 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-amber-500"
           />
         </div>
-        <div>
-          <label className="block text-sm font-medium mb-1">Ort</label>
-          <input
-            type="text"
-            value={ort}
-            onChange={(e) => setOrt(e.target.value)}
-            className="border border-stone-300 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-amber-500"
-          />
+        <div className="flex gap-3">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">Ort</label>
+            <input
+              type="text"
+              value={ort}
+              onChange={(e) => setOrt(e.target.value)}
+              className="border border-stone-300 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
+          <div className="w-20">
+            <label className="block text-sm font-medium mb-1">Land</label>
+            <input
+              type="text"
+              value={land}
+              onChange={(e) => setLand(e.target.value.toUpperCase())}
+              maxLength={3}
+              className="border border-stone-300 rounded px-3 py-2 w-full text-center focus:outline-none focus:ring-2 focus:ring-amber-500"
+            />
+          </div>
         </div>
       </div>
 

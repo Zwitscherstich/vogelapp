@@ -14,6 +14,9 @@ export default function VogelartenPage() {
   const [vogelarten, setVogelarten] = useState<{ id: number; name: string }[]>(
     []
   );
+  const [beobachteteArten, setBeobachteteArten] = useState<
+    Map<number, string[]>
+  >(new Map());
   const [neueArt, setNeueArt] = useState("");
   const [laden, setLaden] = useState(true);
   const [fehler, setFehler] = useState("");
@@ -23,14 +26,29 @@ export default function VogelartenPage() {
 
   async function ladeVogelarten() {
     if (online) {
-      const { data } = await supabase
-        .from("vogelarten")
-        .select("id, name")
-        .order("name");
-      if (data) {
-        setVogelarten(data);
-        await cacheVogelarten(data);
+      const [artenResult, beobResult] = await Promise.all([
+        supabase.from("vogelarten").select("id, name").order("name"),
+        supabase
+          .from("beobachtung_vogelarten")
+          .select("vogelart_id, beobachtungen(land)"),
+      ]);
+
+      if (artenResult.data) {
+        setVogelarten(artenResult.data);
+        await cacheVogelarten(artenResult.data);
       }
+
+      // Ländercodes pro Vogelart sammeln
+      const laenderMap = new Map<number, string[]>();
+      for (const entry of beobResult.data ?? []) {
+        const land =
+          (entry.beobachtungen as unknown as { land: string })?.land ?? "";
+        if (!land) continue;
+        const liste = laenderMap.get(entry.vogelart_id) ?? [];
+        if (!liste.includes(land)) liste.push(land);
+        laenderMap.set(entry.vogelart_id, liste);
+      }
+      setBeobachteteArten(laenderMap);
     } else {
       const cached = await getCachedVogelarten();
       setVogelarten(cached);
@@ -127,22 +145,35 @@ export default function VogelartenPage() {
             {vogelarten.length} Vogelarten in der Liste
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-0">
-            {vogelarten.map((art) => (
-              <div
-                key={art.id}
-                className="px-3 py-1.5 text-sm border-b border-stone-100 flex items-center justify-between group"
-              >
-                <span>{art.name}</span>
-                <button
-                  onClick={() => setLoeschenId(art.id)}
-                  disabled={!online}
-                  className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-100 transition-opacity text-xs px-1 disabled:hidden"
-                  title="Entfernen"
+            {vogelarten.map((art) => {
+              const laender = beobachteteArten.get(art.id);
+              const beobachtet = !!laender && laender.length > 0;
+              return (
+                <div
+                  key={art.id}
+                  className={`px-3 py-1.5 text-sm border-b border-stone-100 flex items-center justify-between group ${
+                    beobachtet ? "bg-emerald-50" : ""
+                  }`}
                 >
-                  ×
-                </button>
-              </div>
-            ))}
+                  <span>
+                    {art.name}
+                    {beobachtet && (
+                      <span className="text-emerald-600 ml-1.5 text-xs">
+                        ({laender.sort().join(", ")})
+                      </span>
+                    )}
+                  </span>
+                  <button
+                    onClick={() => setLoeschenId(art.id)}
+                    disabled={!online}
+                    className="text-stone-300 hover:text-red-500 opacity-0 group-hover:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 max-sm:opacity-100 transition-opacity text-xs px-1 disabled:hidden"
+                    title="Entfernen"
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

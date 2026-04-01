@@ -16,6 +16,7 @@ export default function NeuePage() {
     return heute.toISOString().split("T")[0];
   });
   const [ort, setOrt] = useState("");
+  const [land, setLand] = useState("D");
   const [vogelarten, setVogelarten] = useState<{ id: number; name: string }[]>(
     []
   );
@@ -78,7 +79,7 @@ export default function NeuePage() {
         // --- Online: direkt in Supabase speichern ---
         const { data: beobachtung, error: beobError } = await supabase
           .from("beobachtungen")
-          .insert({ datum, ort })
+          .insert({ datum, ort, land })
           .select("id")
           .single();
 
@@ -133,6 +134,7 @@ export default function NeuePage() {
         await saveOfflineBeobachtung({
           datum,
           ort,
+          land,
           vogelartIds: ausgewaehlteArten,
           neueVogelarten: neueArtenNamen,
         });
@@ -142,6 +144,7 @@ export default function NeuePage() {
       setAusgewaehlteArten([]);
       setNeueArtenNamen([]);
       setOrt("");
+      setLand("D");
       setFotos([]);
       setSuchbegriff("");
       setTimeout(() => setErfolg(false), 3000);
@@ -183,16 +186,29 @@ export default function NeuePage() {
           />
         </div>
 
-        {/* Ort */}
-        <div>
-          <label className="block text-sm font-medium mb-1">Ort</label>
-          <input
-            type="text"
-            value={ort}
-            onChange={(e) => setOrt(e.target.value)}
-            placeholder="z.B. Bodensee, Ufer Ost"
-            className="border border-stone-300 rounded px-3 py-2 w-full max-w-md focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
+        {/* Ort & Land */}
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1">
+            <label className="block text-sm font-medium mb-1">Ort</label>
+            <input
+              type="text"
+              value={ort}
+              onChange={(e) => setOrt(e.target.value)}
+              placeholder="z.B. Bodensee, Ufer Ost"
+              className="border border-stone-300 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
+          <div className="w-24">
+            <label className="block text-sm font-medium mb-1">Land</label>
+            <input
+              type="text"
+              value={land}
+              onChange={(e) => setLand(e.target.value.toUpperCase())}
+              placeholder="D"
+              maxLength={3}
+              className="border border-stone-300 rounded px-3 py-2 w-full text-center focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+          </div>
         </div>
 
         {/* Vogelarten */}

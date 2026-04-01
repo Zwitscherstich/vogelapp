@@ -51,7 +51,7 @@ export async function syncOfflineData(): Promise<number> {
       // Beobachtung anlegen
       const { data: beobachtung, error: beobError } = await supabase
         .from("beobachtungen")
-        .insert({ datum: beob.datum, ort: beob.ort })
+        .insert({ datum: beob.datum, ort: beob.ort, land: beob.land })
         .select("id")
         .single();
 

@@ -9,6 +9,7 @@ interface Beobachtung {
   id: number;
   datum: string;
   ort: string;
+  land: string;
   vogelarten: string[];
   fotos: string[];
 }
@@ -31,7 +32,7 @@ export default function BeobachtungenPage() {
     const [beobResult, artenResult, fotosResult] = await Promise.all([
       supabase
         .from("beobachtungen")
-        .select("id, datum, ort")
+        .select("id, datum, ort, land")
         .order("datum", { ascending: false }),
       supabase
         .from("beobachtung_vogelarten")
@@ -136,7 +137,7 @@ export default function BeobachtungenPage() {
   async function handleExport(b: Beobachtung) {
     const text = [
       `Vogelbeobachtung vom ${formatDatum(b.datum)}`,
-      `Ort: ${b.ort}`,
+      `Ort: ${b.ort} (${b.land})`,
       `Vogelarten: ${b.vogelarten.join(", ")}`,
     ].join("\n");
 
@@ -217,6 +218,7 @@ export default function BeobachtungenPage() {
                       beobachtungId={b.id}
                       datum={b.datum}
                       ort={b.ort}
+                      land={b.land}
                       vorhandeneArten={b.vogelarten}
                       onGespeichert={() => {
                         setBearbeitenId(null);
@@ -234,7 +236,7 @@ export default function BeobachtungenPage() {
                           {ansicht !== "datum" && (
                             <span>📅 {formatDatum(b.datum)}</span>
                           )}
-                          {ansicht !== "ort" && <span>📍 {b.ort}</span>}
+                          {ansicht !== "ort" && <span>📍 {b.ort} ({b.land})</span>}
                         </div>
                         <div className="flex gap-1 shrink-0 ml-2">
                           <button

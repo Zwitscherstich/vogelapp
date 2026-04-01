@@ -91,6 +91,7 @@ export interface OfflineBeobachtung {
   tempId?: number;
   datum: string;
   ort: string;
+  land: string;
   vogelartIds: number[];
   // Neue Vogelart-Namen die erst noch angelegt werden müssen
   neueVogelarten: string[];
