@@ -3,6 +3,7 @@ import "./globals.css";
 import Navigation from "@/components/Navigation";
 import SyncStatus from "@/components/SyncStatus";
 import { ServiceWorkerRegistration } from "@/components/ServiceWorkerRegistration";
+import EasterEgg from "@/components/EasterEgg";
 
 export const metadata: Metadata = {
   title: "Vogeltagebuch",
@@ -30,6 +31,7 @@ export default function RootLayout({
         <Navigation />
         <SyncStatus />
         <main className="max-w-4xl mx-auto px-4 py-6">{children}</main>
+        <EasterEgg />
         <ServiceWorkerRegistration />
       </body>
     </html>

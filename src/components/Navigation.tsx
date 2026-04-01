@@ -17,8 +17,8 @@ export default function Navigation() {
   return (
     <nav className="bg-white border-b border-stone-200 shadow-sm">
       <div className="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        <Link href="/" className="text-xl font-bold text-emerald-700">
-          🐦 Vogeltagebuch
+        <Link href="/" className="text-xl font-bold text-emerald-700" data-vogel-logo>
+          <span className="select-none">🐦</span> Vogeltagebuch
         </Link>
 
         {/* Desktop-Menü */}
