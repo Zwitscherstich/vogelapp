@@ -196,22 +196,37 @@ export default function DashboardPage() {
       .slice(0, 5)
       .map(([name, anzahl]) => ({ name, anzahl }));
 
-    // Längste Beobachtungs-Serie (Tage in Folge)
+    // ISO-Wochennummer berechnen
+    function getISOWeek(d: Date): string {
+      const date = new Date(d.getTime());
+      date.setHours(0, 0, 0, 0);
+      date.setDate(date.getDate() + 3 - ((date.getDay() + 6) % 7));
+      const week1 = new Date(date.getFullYear(), 0, 4);
+      const weekNum = 1 + Math.round(((date.getTime() - week1.getTime()) / 86400000 - 3 + ((week1.getDay() + 6) % 7)) / 7);
+      return `${date.getFullYear()}-W${String(weekNum).padStart(2, "0")}`;
+    }
+
+    // Wochen-basierte Serie
     const einzigartigeDaten = [...new Set(beobachtungen.map((b) => b.datum))].sort();
-    let maxStreak = 0;
-    let aktuellerStreak = 1;
-    for (let i = 1; i < einzigartigeDaten.length; i++) {
-      const prev = new Date(einzigartigeDaten[i - 1]);
-      const curr = new Date(einzigartigeDaten[i]);
-      const diff = (curr.getTime() - prev.getTime()) / (1000 * 60 * 60 * 24);
-      if (diff === 1) {
-        aktuellerStreak++;
+    const beobWochen = [...new Set(
+      beobachtungen.map((b) => getISOWeek(new Date(b.datum + "T00:00:00")))
+    )].sort();
+
+    let maxStreakWochen = 0;
+    let aktuellerStreakW = 1;
+    for (let i = 1; i < beobWochen.length; i++) {
+      const [prevY, prevW] = beobWochen[i - 1].split("-W").map(Number);
+      const [currY, currW] = beobWochen[i].split("-W").map(Number);
+      const istKonsekutiv = (currY === prevY && currW === prevW + 1) ||
+        (currY === prevY + 1 && currW === 1 && prevW >= 52);
+      if (istKonsekutiv) {
+        aktuellerStreakW++;
       } else {
-        maxStreak = Math.max(maxStreak, aktuellerStreak);
-        aktuellerStreak = 1;
+        maxStreakWochen = Math.max(maxStreakWochen, aktuellerStreakW);
+        aktuellerStreakW = 1;
       }
     }
-    maxStreak = Math.max(maxStreak, aktuellerStreak);
+    maxStreakWochen = Math.max(maxStreakWochen, aktuellerStreakW);
 
     // Aktivste Wochentage
     const wochentage = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
@@ -234,20 +249,20 @@ export default function DashboardPage() {
       monateDaten[0]
     );
 
-    // Aktuelle Serie (endet heute oder gestern)
-    const heuteStr = heute.toISOString().split("T")[0];
-    const gesternStr = new Date(heute.getTime() - 86400000)
-      .toISOString()
-      .split("T")[0];
-    let aktuelleStreakTage = 0;
-    if (einzigartigeDaten.includes(heuteStr) || einzigartigeDaten.includes(gesternStr)) {
-      const startDatum = einzigartigeDaten.includes(heuteStr) ? heuteStr : gesternStr;
-      aktuelleStreakTage = 1;
-      let checkDate = new Date(startDatum + "T00:00:00");
-      for (let i = einzigartigeDaten.indexOf(startDatum) - 1; i >= 0; i--) {
-        checkDate = new Date(checkDate.getTime() - 86400000);
-        if (einzigartigeDaten[i] === checkDate.toISOString().split("T")[0]) {
-          aktuelleStreakTage++;
+    // Aktuelle Wochen-Serie
+    const aktuelleWoche = getISOWeek(heute);
+    const letzteWoche = getISOWeek(new Date(heute.getTime() - 7 * 86400000));
+    let aktuelleStreakWochen = 0;
+    if (beobWochen.includes(aktuelleWoche) || beobWochen.includes(letzteWoche)) {
+      const startW = beobWochen.includes(aktuelleWoche) ? aktuelleWoche : letzteWoche;
+      aktuelleStreakWochen = 1;
+      for (let i = beobWochen.indexOf(startW) - 1; i >= 0; i--) {
+        const [prevY, prevW] = beobWochen[i].split("-W").map(Number);
+        const [currY, currW] = beobWochen[i + 1].split("-W").map(Number);
+        const istKonsekutiv = (currY === prevY && currW === prevW + 1) ||
+          (currY === prevY + 1 && currW === 1 && prevW >= 52);
+        if (istKonsekutiv) {
+          aktuelleStreakWochen++;
         } else {
           break;
         }
@@ -288,10 +303,68 @@ export default function DashboardPage() {
       { saison: "Herbst", icon: "🍂", arten: saisonArten["Herbst"].size },
     ];
 
-    // Meilensteine
-    const meilensteine = [10, 25, 50, 75, 100, 150, 200, 300, 500];
-    const naechsterMeilensteinArten = meilensteine.find((m) => m > alleArten.size) ?? alleArten.size + 50;
-    const naechsterMeilensteinBeob = meilensteine.find((m) => m > beobachtungen.length) ?? beobachtungen.length + 50;
+    // Anzahl Saisons mit Beobachtungen (alle Jahre)
+    const alleSaisons = new Set<string>();
+    for (const b of beobachtungen) {
+      const m = new Date(b.datum + "T00:00:00").getMonth();
+      const s = m <= 1 || m === 11 ? "W" : m <= 4 ? "F" : m <= 7 ? "S" : "H";
+      alleSaisons.add(s);
+    }
+
+    // Meilenstein-System mit Tiers
+    interface Meilenstein {
+      id: string;
+      name: string;
+      beschreibung: string;
+      icon: string;
+      tier: "bronze" | "silber" | "gold" | "diamant" | "legendaer";
+      bedingung: number;
+      aktuell: number;
+      erreicht: boolean;
+    }
+
+    const alleMeilensteine: Meilenstein[] = [
+      // Bronze
+      { id: "b1", name: "Erster Blick", beschreibung: "Erste Beobachtung", icon: "👀", tier: "bronze", bedingung: 1, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 1 },
+      { id: "b2", name: "Handvoll", beschreibung: "5 Vogelarten entdeckt", icon: "🖐️", tier: "bronze", bedingung: 5, aktuell: alleArten.size, erreicht: alleArten.size >= 5 },
+      { id: "b3", name: "Stammgast", beschreibung: "10 Beobachtungen", icon: "📝", tier: "bronze", bedingung: 10, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 10 },
+      { id: "b4", name: "Artenjäger", beschreibung: "10 Vogelarten entdeckt", icon: "🔍", tier: "bronze", bedingung: 10, aktuell: alleArten.size, erreicht: alleArten.size >= 10 },
+      { id: "b5", name: "Entdecker", beschreibung: "3 verschiedene Orte", icon: "🗺️", tier: "bronze", bedingung: 3, aktuell: orte.size, erreicht: orte.size >= 3 },
+      { id: "b6", name: "Wochenstart", beschreibung: "2 Wochen am Stück", icon: "📅", tier: "bronze", bedingung: 2, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 2 },
+
+      // Silber
+      { id: "s1", name: "Kennerblick", beschreibung: "25 Vogelarten entdeckt", icon: "🦅", tier: "silber", bedingung: 25, aktuell: alleArten.size, erreicht: alleArten.size >= 25 },
+      { id: "s2", name: "Routinier", beschreibung: "25 Beobachtungen", icon: "📋", tier: "silber", bedingung: 25, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 25 },
+      { id: "s3", name: "Wandervogel", beschreibung: "5 verschiedene Orte", icon: "🥾", tier: "silber", bedingung: 5, aktuell: orte.size, erreicht: orte.size >= 5 },
+      { id: "s4", name: "Grenzgänger", beschreibung: "2 Länder besucht", icon: "✈️", tier: "silber", bedingung: 2, aktuell: laender.size, erreicht: laender.size >= 2 },
+      { id: "s5", name: "Monatsmarathon", beschreibung: "4 Wochen am Stück", icon: "🔥", tier: "silber", bedingung: 4, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 4 },
+      { id: "s6", name: "Fleißig", beschreibung: "50 Beobachtungen", icon: "⭐", tier: "silber", bedingung: 50, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 50 },
+      { id: "s7", name: "Jahreszeiten", beschreibung: "In allen 4 Saisons beobachtet", icon: "🌍", tier: "silber", bedingung: 4, aktuell: alleSaisons.size, erreicht: alleSaisons.size >= 4 },
+
+      // Gold
+      { id: "g1", name: "Ornithologe", beschreibung: "50 Vogelarten entdeckt", icon: "🏅", tier: "gold", bedingung: 50, aktuell: alleArten.size, erreicht: alleArten.size >= 50 },
+      { id: "g2", name: "Tagebuch-Profi", beschreibung: "100 Beobachtungen", icon: "📖", tier: "gold", bedingung: 100, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 100 },
+      { id: "g3", name: "Reisender", beschreibung: "10 verschiedene Orte", icon: "🧭", tier: "gold", bedingung: 10, aktuell: orte.size, erreicht: orte.size >= 10 },
+      { id: "g4", name: "Kosmopolit", beschreibung: "3 Länder besucht", icon: "🌐", tier: "gold", bedingung: 3, aktuell: laender.size, erreicht: laender.size >= 3 },
+      { id: "g5", name: "Quartalsjäger", beschreibung: "8 Wochen am Stück", icon: "💎", tier: "gold", bedingung: 8, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 8 },
+      { id: "g6", name: "Artensammler", beschreibung: "75 Vogelarten entdeckt", icon: "🦉", tier: "gold", bedingung: 75, aktuell: alleArten.size, erreicht: alleArten.size >= 75 },
+      { id: "g7", name: "Kartograph", beschreibung: "15 verschiedene Orte", icon: "📌", tier: "gold", bedingung: 15, aktuell: orte.size, erreicht: orte.size >= 15 },
+
+      // Diamant
+      { id: "d1", name: "Centurion", beschreibung: "100 Vogelarten entdeckt", icon: "💯", tier: "diamant", bedingung: 100, aktuell: alleArten.size, erreicht: alleArten.size >= 100 },
+      { id: "d2", name: "Chronist", beschreibung: "200 Beobachtungen", icon: "📚", tier: "diamant", bedingung: 200, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 200 },
+      { id: "d3", name: "Globetrotter", beschreibung: "25 verschiedene Orte", icon: "🌎", tier: "diamant", bedingung: 25, aktuell: orte.size, erreicht: orte.size >= 25 },
+      { id: "d4", name: "Weltenbummler", beschreibung: "5 Länder besucht", icon: "🗺️", tier: "diamant", bedingung: 5, aktuell: laender.size, erreicht: laender.size >= 5 },
+      { id: "d5", name: "Halbjahreslauf", beschreibung: "12 Wochen am Stück", icon: "🏆", tier: "diamant", bedingung: 12, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 12 },
+      { id: "d6", name: "Meisterbeobachter", beschreibung: "150 Vogelarten entdeckt", icon: "🔭", tier: "diamant", bedingung: 150, aktuell: alleArten.size, erreicht: alleArten.size >= 150 },
+
+      // Legendär
+      { id: "l1", name: "Legende", beschreibung: "200 Vogelarten entdeckt", icon: "👑", tier: "legendaer", bedingung: 200, aktuell: alleArten.size, erreicht: alleArten.size >= 200 },
+      { id: "l2", name: "Enzyklopädie", beschreibung: "500 Beobachtungen", icon: "🏛️", tier: "legendaer", bedingung: 500, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 500 },
+      { id: "l3", name: "Nomade", beschreibung: "50 verschiedene Orte", icon: "⛰️", tier: "legendaer", bedingung: 50, aktuell: orte.size, erreicht: orte.size >= 50 },
+      { id: "l4", name: "Jahreslauf", beschreibung: "26 Wochen am Stück", icon: "🌟", tier: "legendaer", bedingung: 26, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 26 },
+      { id: "l5", name: "Unsterblich", beschreibung: "1000 Beobachtungen", icon: "🔱", tier: "legendaer", bedingung: 1000, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 1000 },
+    ];
 
     // Seltenste Arten (nur 1x gesehen)
     const selten = [...artHaeufigkeit.entries()]
@@ -325,16 +398,15 @@ export default function DashboardPage() {
       kumulativ,
       topArten,
       topOrte,
-      maxStreak,
-      aktuelleStreakTage,
+      maxStreakWochen,
+      aktuelleStreakWochen,
       tageSeitLetzterBeob,
       wochentagDaten,
       durchschnittArten,
       produktivsterMonat,
       laender: [...laender],
       saisonDaten,
-      naechsterMeilensteinArten,
-      naechsterMeilensteinBeob,
+      alleMeilensteine,
       selten,
       neuentdeckungenProMonat,
     };
@@ -460,7 +532,7 @@ export default function DashboardPage() {
       {/* Motivations-Banner */}
       <MotivationsBanner
         tageSeitLetzterBeob={stats.tageSeitLetzterBeob}
-        aktuelleStreakTage={stats.aktuelleStreakTage}
+        aktuelleStreakWochen={stats.aktuelleStreakWochen}
         tageSeitNeuentdeckung={stats.tageSeitNeuentdeckung}
         neueArtenDiesesJahr={stats.neueArtenDiesesJahr}
       />
@@ -507,18 +579,18 @@ export default function DashboardPage() {
 
         <div className="bg-gradient-to-br from-amber-500 to-orange-600 rounded-xl p-4 text-white shadow-lg">
           <p className="text-amber-100 text-[10px] uppercase tracking-wide mb-1">
-            Aktuelle Serie
+            Wochen-Serie
           </p>
           <p className="text-2xl font-bold">
-            {stats.aktuelleStreakTage > 0
-              ? `${stats.aktuelleStreakTage}d 🔥`
-              : "0d"}
+            {stats.aktuelleStreakWochen > 0
+              ? `${stats.aktuelleStreakWochen}W 🔥`
+              : "0W"}
           </p>
           <p className="text-amber-100 text-xs">
-            {stats.aktuelleStreakTage > 0 ? "am Laufen!" : "Starte heute!"}
+            {stats.aktuelleStreakWochen > 0 ? "am Laufen!" : "Starte diese Woche!"}
           </p>
           <p className="text-amber-200 text-[10px] mt-1">
-            Rekord: {stats.maxStreak} Tage
+            Rekord: {stats.maxStreakWochen} Wochen
           </p>
         </div>
 
@@ -799,27 +871,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Meilensteine */}
-      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
-        <h2 className="font-semibold text-stone-800 mb-4">
-          Nächste Meilensteine
-        </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <MeilensteinBar
-            label="Vogelarten"
-            aktuell={stats.gesamtArten}
-            ziel={stats.naechsterMeilensteinArten}
-            icon="🐦"
-            farbe="#059669"
-          />
-          <MeilensteinBar
-            label="Beobachtungen"
-            aktuell={stats.gesamtBeobachtungen}
-            ziel={stats.naechsterMeilensteinBeob}
-            icon="📋"
-            farbe="#0284c7"
-          />
-        </div>
-      </div>
+      <MeilensteinSektion meilensteine={stats.alleMeilensteine} />
 
       {/* Seltenheiten */}
       {stats.selten.length > 0 && (
@@ -863,12 +915,12 @@ export default function DashboardPage() {
 
 function MotivationsBanner({
   tageSeitLetzterBeob,
-  aktuelleStreakTage,
+  aktuelleStreakWochen,
   tageSeitNeuentdeckung,
   neueArtenDiesesJahr,
 }: {
   tageSeitLetzterBeob: number | null;
-  aktuelleStreakTage: number;
+  aktuelleStreakWochen: number;
   tageSeitNeuentdeckung: number | null;
   neueArtenDiesesJahr: number;
 }) {
@@ -877,8 +929,8 @@ function MotivationsBanner({
   let gradient = "";
 
   if (tageSeitLetzterBeob === 0) {
-    if (aktuelleStreakTage >= 3) {
-      nachricht = `${aktuelleStreakTage} Tage in Folge — du bist on fire! Kannst du den Rekord knacken?`;
+    if (aktuelleStreakWochen >= 3) {
+      nachricht = `${aktuelleStreakWochen} Wochen in Folge — du bist on fire! Kannst du den Rekord knacken?`;
       icon = "🔥";
       gradient = "from-orange-500 to-red-500";
     } else {
@@ -923,47 +975,174 @@ function MotivationsBanner({
   );
 }
 
-function MeilensteinBar({
-  label,
-  aktuell,
-  ziel,
-  icon,
-  farbe,
-}: {
-  label: string;
-  aktuell: number;
-  ziel: number;
+interface MeilensteinTyp {
+  id: string;
+  name: string;
+  beschreibung: string;
   icon: string;
-  farbe: string;
-}) {
-  const prozent = Math.min((aktuell / ziel) * 100, 100);
-  const fehlend = ziel - aktuell;
+  tier: "bronze" | "silber" | "gold" | "diamant" | "legendaer";
+  bedingung: number;
+  aktuell: number;
+  erreicht: boolean;
+}
+
+const TIER_CONFIG = {
+  bronze: { label: "Bronze", farbe: "from-amber-600 to-amber-700", bg: "bg-amber-50 border-amber-200", text: "text-amber-700", ring: "ring-amber-300" },
+  silber: { label: "Silber", farbe: "from-slate-400 to-slate-500", bg: "bg-slate-50 border-slate-200", text: "text-slate-600", ring: "ring-slate-300" },
+  gold: { label: "Gold", farbe: "from-yellow-400 to-yellow-500", bg: "bg-yellow-50 border-yellow-200", text: "text-yellow-700", ring: "ring-yellow-300" },
+  diamant: { label: "Diamant", farbe: "from-cyan-400 to-blue-500", bg: "bg-cyan-50 border-cyan-200", text: "text-cyan-700", ring: "ring-cyan-300" },
+  legendaer: { label: "Legendär", farbe: "from-purple-500 to-pink-500", bg: "bg-purple-50 border-purple-200", text: "text-purple-700", ring: "ring-purple-300" },
+};
+
+const TIER_ORDER: Array<"bronze" | "silber" | "gold" | "diamant" | "legendaer"> = ["bronze", "silber", "gold", "diamant", "legendaer"];
+
+function MeilensteinSektion({ meilensteine }: { meilensteine: MeilensteinTyp[] }) {
+  const [tab, setTab] = useState<"alle" | "erreicht" | "offen">("alle");
+
+  const erreichte = meilensteine.filter((m) => m.erreicht);
+  const offene = meilensteine.filter((m) => !m.erreicht);
+  const naechste = offene
+    .map((m) => ({ ...m, fortschritt: m.aktuell / m.bedingung }))
+    .sort((a, b) => b.fortschritt - a.fortschritt)
+    .slice(0, 3);
+
+  const anzeigeListe = tab === "erreicht" ? erreichte : tab === "offen" ? offene : meilensteine;
+
+  // Nach Tier gruppieren
+  const gruppiert = TIER_ORDER.map((tier) => ({
+    tier,
+    config: TIER_CONFIG[tier],
+    items: anzeigeListe.filter((m) => m.tier === tier),
+  })).filter((g) => g.items.length > 0);
 
   return (
-    <div className="bg-stone-50 rounded-lg p-4">
-      <div className="flex items-center justify-between mb-2">
-        <span className="text-sm font-medium text-stone-700">
-          {icon} {label}
-        </span>
-        <span className="text-xs text-stone-500">
-          {aktuell} / {ziel}
+    <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+      <div className="flex items-center justify-between mb-1">
+        <h2 className="font-semibold text-stone-800">Meilensteine</h2>
+        <span className="text-sm text-emerald-600 font-medium">
+          {erreichte.length} / {meilensteine.length}
         </span>
       </div>
-      <div className="h-3 bg-stone-200 rounded-full overflow-hidden mb-1.5">
+
+      {/* Gesamt-Fortschritt */}
+      <div className="h-2 bg-stone-100 rounded-full overflow-hidden mb-4">
         <div
-          className="h-full rounded-full transition-all relative"
-          style={{ width: `${prozent}%`, backgroundColor: farbe }}
-        >
-          {prozent > 15 && (
-            <span className="absolute inset-0 flex items-center justify-center text-[9px] text-white font-bold">
-              {Math.round(prozent)}%
-            </span>
-          )}
-        </div>
+          className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full transition-all"
+          style={{ width: `${(erreichte.length / meilensteine.length) * 100}%` }}
+        />
       </div>
-      <p className="text-xs text-stone-400">
-        Noch {fehlend} bis zum nächsten Meilenstein!
-      </p>
+
+      {/* Nächste Meilensteine Highlight */}
+      {naechste.length > 0 && tab === "alle" && (
+        <div className="mb-4">
+          <p className="text-xs text-stone-400 uppercase tracking-wide mb-2">Fast geschafft</p>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            {naechste.map((m) => {
+              const prozent = Math.min(Math.round(m.fortschritt * 100), 99);
+              const cfg = TIER_CONFIG[m.tier];
+              return (
+                <div key={m.id} className={`${cfg.bg} border rounded-lg p-3`}>
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-lg">{m.icon}</span>
+                    <div className="min-w-0">
+                      <p className={`text-sm font-medium ${cfg.text} truncate`}>{m.name}</p>
+                      <p className="text-[10px] text-stone-400">{m.beschreibung}</p>
+                    </div>
+                  </div>
+                  <div className="h-1.5 bg-stone-200 rounded-full overflow-hidden mt-1">
+                    <div
+                      className={`h-full rounded-full bg-gradient-to-r ${cfg.farbe}`}
+                      style={{ width: `${prozent}%` }}
+                    />
+                  </div>
+                  <p className="text-[10px] text-stone-400 mt-1">
+                    {m.aktuell} / {m.bedingung} ({prozent}%)
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-4">
+        {([
+          { key: "alle" as const, label: `Alle (${meilensteine.length})` },
+          { key: "erreicht" as const, label: `Erreicht (${erreichte.length})` },
+          { key: "offen" as const, label: `Offen (${offene.length})` },
+        ]).map((t) => (
+          <button
+            key={t.key}
+            onClick={() => setTab(t.key)}
+            className={`px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+              tab === t.key
+                ? "bg-emerald-600 text-white"
+                : "bg-stone-100 text-stone-600 hover:bg-stone-200"
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Meilensteine nach Tier */}
+      <div className="space-y-4">
+        {gruppiert.map(({ tier, config, items }) => (
+          <div key={tier}>
+            <div className="flex items-center gap-2 mb-2">
+              <div className={`h-3 w-3 rounded-full bg-gradient-to-r ${config.farbe}`} />
+              <span className={`text-xs font-semibold uppercase tracking-wide ${config.text}`}>
+                {config.label}
+              </span>
+              <span className="text-[10px] text-stone-400">
+                {items.filter((m) => m.erreicht).length} / {meilensteine.filter((m) => m.tier === tier).length}
+              </span>
+            </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+              {items.map((m) => {
+                const prozent = Math.min(Math.round((m.aktuell / m.bedingung) * 100), 100);
+                return (
+                  <div
+                    key={m.id}
+                    className={`rounded-lg p-2.5 border text-center transition-all ${
+                      m.erreicht
+                        ? `${config.bg} ring-1 ${config.ring}`
+                        : "bg-stone-50 border-stone-150 opacity-60"
+                    }`}
+                  >
+                    <span className={`text-xl ${m.erreicht ? "" : "grayscale opacity-50"}`}>
+                      {m.icon}
+                    </span>
+                    <p className={`text-xs font-medium mt-1 ${m.erreicht ? config.text : "text-stone-400"}`}>
+                      {m.name}
+                    </p>
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-tight">
+                      {m.beschreibung}
+                    </p>
+                    {!m.erreicht && (
+                      <div className="mt-1.5">
+                        <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full bg-gradient-to-r ${config.farbe}`}
+                            style={{ width: `${prozent}%` }}
+                          />
+                        </div>
+                        <p className="text-[9px] text-stone-400 mt-0.5">
+                          {m.aktuell}/{m.bedingung}
+                        </p>
+                      </div>
+                    )}
+                    {m.erreicht && (
+                      <p className="text-[10px] text-emerald-500 font-medium mt-1">✓</p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }

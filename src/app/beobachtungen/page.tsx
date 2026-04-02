@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import BeobachtungBearbeiten from "@/components/BeobachtungBearbeiten";
+import ExcelImport from "@/components/ExcelImport";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 
 interface Beobachtung {
@@ -192,6 +193,12 @@ export default function BeobachtungenPage() {
           ))}
         </div>
       </div>
+
+      {online && (
+        <div className="mb-6">
+          <ExcelImport onImportiert={ladeBeobachtungen} />
+        </div>
+      )}
 
       {!online && (
         <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-4">
