@@ -359,27 +359,46 @@ export default function DashboardPage() {
       beobachtungen.map((b) => new Date(b.datum + "T00:00:00").getMonth())
     );
 
-    // Greifvögel
-    const greifvoegel = ["Mäusebussard", "Sperber", "Habicht", "Turmfalke", "Wanderfalke",
-      "Rotmilan", "Schwarzmilan", "Seeadler", "Steinadler", "Fischadler",
-      "Wespenbussard", "Kornweihe", "Rohrweihe", "Baumfalke", "Merlin"];
-    const gesichteteGreifvoegel = greifvoegel.filter((g) =>
-      [...alleArten].some((a) => a.toLowerCase() === g.toLowerCase())
-    );
+    // Artengruppen per Pattern-Matching (erkennt auch neue/unbekannte Arten)
+    const artenLower = [...alleArten].map((a) => a.toLowerCase());
 
-    // Spechte
-    const spechte = ["Buntspecht", "Grünspecht", "Schwarzspecht", "Kleinspecht",
-      "Mittelspecht", "Dreizehenspecht", "Weißrückenspecht", "Grauspecht", "Wendehals"];
-    const gesichteteSpechte = spechte.filter((s) =>
-      [...alleArten].some((a) => a.toLowerCase() === s.toLowerCase())
-    );
+    function matcheGruppe(muster: string[]): string[] {
+      return artenLower.filter((a) =>
+        muster.some((m) => a.includes(m))
+      );
+    }
 
-    // Eulen
-    const eulen = ["Waldkauz", "Waldohreule", "Uhu", "Schleiereule", "Steinkauz",
-      "Zwergohreule", "Sumpfohreule", "Sperlingskauz", "Raufußkauz"];
-    const gesichteteEulen = eulen.filter((e) =>
-      [...alleArten].some((a) => a.toLowerCase() === e.toLowerCase())
-    );
+    // Greifvögel: Namensbestandteile + Einzelnamen
+    const greifvogelMuster = ["adler", "bussard", "falke", "habicht", "milan", "weihe", "sperber"];
+    const greifvogelEinzel = ["merlin"];
+    const gesichteteGreifvoegel = [
+      ...matcheGruppe(greifvogelMuster),
+      ...artenLower.filter((a) => greifvogelEinzel.includes(a)),
+    ].filter((v, i, arr) => arr.indexOf(v) === i);
+
+    // Spechte: alles mit "specht" + Wendehals
+    const spechtMuster = ["specht"];
+    const spechtEinzel = ["wendehals"];
+    const gesichteteSpechte = [
+      ...matcheGruppe(spechtMuster),
+      ...artenLower.filter((a) => spechtEinzel.includes(a)),
+    ].filter((v, i, arr) => arr.indexOf(v) === i);
+
+    // Eulen: alles mit "eule", "kauz", "uhu"
+    const eulenMuster = ["eule", "kauz"];
+    const eulenEinzel = ["uhu"];
+    const gesichteteEulen = [
+      ...matcheGruppe(eulenMuster),
+      ...artenLower.filter((a) => eulenEinzel.includes(a)),
+    ].filter((v, i, arr) => arr.indexOf(v) === i);
+
+    // Wasservögel: Enten, Gänse, Schwäne, Taucher, Möwen, Reiher, etc.
+    const wasservogelMuster = ["ente", "gans", "schwan", "taucher", "möwe", "reiher", "säger", "kormoran"];
+    const wasservogelEinzel = ["blässhuhn", "teichhuhn", "wasseramsel"];
+    const gesichteteWasservoegel = [
+      ...matcheGruppe(wasservogelMuster),
+      ...artenLower.filter((a) => wasservogelEinzel.includes(a)),
+    ].filter((v, i, arr) => arr.indexOf(v) === i);
 
     // An einem Ort 5+ Arten in einer Beobachtung
     const reicheBeob = beobachtungen.filter((b) => b.vogelarten.length >= 5);
@@ -396,15 +415,6 @@ export default function DashboardPage() {
 
     // Neujahrsbeobachtung (1. Januar)
     const neujahrBeob = beobachtungen.some((b) => b.datum.endsWith("-01-01"));
-
-    // Wasservögel
-    const wasservoegel = ["Stockente", "Reiherente", "Blässhuhn", "Teichhuhn", "Graureiher",
-      "Haubentaucher", "Kormoran", "Höckerschwan", "Graugans", "Kanadagans",
-      "Nilgans", "Schnatterente", "Krickente", "Tafelente", "Schellente",
-      "Gänsesäger", "Zwergtaucher", "Lachmöwe", "Silbermöwe", "Mandarinente"];
-    const gesichteteWasservoegel = wasservoegel.filter((w) =>
-      [...alleArten].some((a) => a.toLowerCase() === w.toLowerCase())
-    );
 
     // Meilenstein-System mit Tiers
     interface Meilenstein {
