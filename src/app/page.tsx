@@ -9,6 +9,11 @@ import {
   saveOfflineBeobachtung,
 } from "@/lib/offlineDb";
 
+interface BekannterOrt {
+  ort: string;
+  land: string;
+}
+
 export default function NeuePage() {
   const online = useOnlineStatus();
   const [datum, setDatum] = useState(() => {
@@ -30,6 +35,17 @@ export default function NeuePage() {
   const suchfeldRef = useRef<HTMLInputElement>(null);
   const fotoInputRef = useRef<HTMLInputElement>(null);
 
+  // Ort-Autocomplete
+  const [bekannteOrte, setBekannteOrte] = useState<BekannterOrt[]>([]);
+  const [ortOffen, setOrtOffen] = useState(false);
+  const [ortIndex, setOrtIndex] = useState(-1);
+  const ortRef = useRef<HTMLInputElement>(null);
+  const ortDropdownRef = useRef<HTMLDivElement>(null);
+
+  // Vogelarten-Keyboard-Navigation
+  const [artenIndex, setArtenIndex] = useState(-1);
+  const artenListeRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     async function ladeVogelarten() {
       if (online) {
@@ -49,17 +65,159 @@ export default function NeuePage() {
     ladeVogelarten();
   }, [online]);
 
+  // Bekannte Orte aus bisherigen Beobachtungen laden
+  useEffect(() => {
+    async function ladeOrte() {
+      if (online) {
+        const { data } = await supabase
+          .from("beobachtungen")
+          .select("ort, land");
+        if (data) {
+          const unique = new Map<string, string>();
+          for (const d of data) {
+            if (!unique.has(d.ort)) unique.set(d.ort, d.land);
+          }
+          setBekannteOrte(
+            [...unique.entries()].map(([ort, land]) => ({ ort, land }))
+              .sort((a, b) => a.ort.localeCompare(b.ort))
+          );
+        }
+      }
+    }
+    ladeOrte();
+  }, [online]);
+
+  const gefilterteOrte = ort.trim()
+    ? bekannteOrte.filter((o) =>
+        o.ort.toLowerCase().includes(ort.toLowerCase()) &&
+        o.ort.toLowerCase() !== ort.toLowerCase()
+      )
+    : [];
+
   const gefilterteArten = vogelarten.filter((art) =>
     art.name.toLowerCase().includes(suchbegriff.toLowerCase())
   );
+
+  // Reset artenIndex when search changes
+  useEffect(() => {
+    setArtenIndex(-1);
+  }, [suchbegriff]);
+
+  // Reset ortIndex when ort changes
+  useEffect(() => {
+    setOrtIndex(-1);
+  }, [ort]);
+
+  function waehleOrt(o: BekannterOrt) {
+    setOrt(o.ort);
+    setLand(o.land);
+    setOrtOffen(false);
+    setOrtIndex(-1);
+  }
 
   function toggleArt(id: number) {
     setAusgewaehlteArten((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
     );
     setSuchbegriff("");
+    setArtenIndex(-1);
     setTimeout(() => suchfeldRef.current?.focus(), 0);
   }
+
+  function handleOrtKeyDown(e: React.KeyboardEvent) {
+    if (!ortOffen || gefilterteOrte.length === 0) return;
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setOrtIndex((prev) => Math.min(prev + 1, gefilterteOrte.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setOrtIndex((prev) => Math.max(prev - 1, 0));
+    } else if (e.key === "Enter" && ortIndex >= 0) {
+      e.preventDefault();
+      waehleOrt(gefilterteOrte[ortIndex]);
+    } else if (e.key === "Escape") {
+      setOrtOffen(false);
+    }
+  }
+
+  function handleArtenKeyDown(e: React.KeyboardEvent) {
+    const sichtbar = gefilterteArten.filter(
+      (a) => !ausgewaehlteArten.includes(a.id)
+    );
+
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setArtenIndex((prev) => Math.min(prev + 1, sichtbar.length - 1));
+      // Scroll into view
+      setTimeout(() => {
+        const items = artenListeRef.current?.querySelectorAll("[data-art-item]");
+        if (items && artenIndex + 1 < items.length) {
+          items[artenIndex + 1]?.scrollIntoView({ block: "nearest" });
+        }
+      }, 0);
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setArtenIndex((prev) => Math.max(prev - 1, -1));
+      setTimeout(() => {
+        const items = artenListeRef.current?.querySelectorAll("[data-art-item]");
+        if (items && artenIndex - 1 >= 0) {
+          items[artenIndex - 1]?.scrollIntoView({ block: "nearest" });
+        }
+      }, 0);
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (artenIndex >= 0 && artenIndex < sichtbar.length) {
+        // Highlighted item selected
+        toggleArt(sichtbar[artenIndex].id);
+      } else if (sichtbar.length > 0) {
+        // No highlight but items exist — select first
+        toggleArt(sichtbar[0].id);
+      } else if (gefilterteArten.length === 0 && suchbegriff.trim()) {
+        // No match — trigger new species creation
+        handleNeueArt();
+      }
+    }
+  }
+
+  async function handleNeueArt() {
+    const name = suchbegriff.trim();
+    if (!name) return;
+    if (online) {
+      const { data, error } = await supabase
+        .from("vogelarten")
+        .insert({ name })
+        .select("id, name")
+        .single();
+      if (!error && data) {
+        setVogelarten((prev) =>
+          [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
+        );
+        toggleArt(data.id);
+      }
+    } else {
+      setNeueArtenNamen((prev) => [...prev, name]);
+    }
+    setSuchbegriff("");
+    setArtenIndex(-1);
+    setTimeout(() => suchfeldRef.current?.focus(), 0);
+  }
+
+  // Close ort dropdown when clicking outside
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (
+        ortRef.current &&
+        !ortRef.current.contains(e.target as Node) &&
+        ortDropdownRef.current &&
+        !ortDropdownRef.current.contains(e.target as Node)
+      ) {
+        setOrtOffen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   async function handleSpeichern() {
     if (
@@ -76,7 +234,6 @@ export default function NeuePage() {
 
     try {
       if (online) {
-        // --- Online: direkt in Supabase speichern ---
         const { data: beobachtung, error: beobError } = await supabase
           .from("beobachtungen")
           .insert({ datum, ort, land })
@@ -85,7 +242,6 @@ export default function NeuePage() {
 
         if (beobError) throw beobError;
 
-        // Neue Vogelarten anlegen
         const alleArtIds = [...ausgewaehlteArten];
         for (const name of neueArtenNamen) {
           const { data: neue, error } = await supabase
@@ -112,7 +268,6 @@ export default function NeuePage() {
 
         if (artError) throw artError;
 
-        // Fotos hochladen
         for (const foto of fotos) {
           const dateiname = `${beobachtung.id}/${Date.now()}-${foto.name}`;
           const { error: uploadError } = await supabase.storage
@@ -130,7 +285,6 @@ export default function NeuePage() {
             .insert({ beobachtung_id: beobachtung.id, url: publicUrl });
         }
       } else {
-        // --- Offline: lokal speichern ---
         await saveOfflineBeobachtung({
           datum,
           ort,
@@ -147,6 +301,7 @@ export default function NeuePage() {
       setLand("D");
       setFotos([]);
       setSuchbegriff("");
+      setArtenIndex(-1);
       setTimeout(() => setErfolg(false), 3000);
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : "Unbekannter Fehler";
@@ -155,6 +310,11 @@ export default function NeuePage() {
       setSpeichern(false);
     }
   }
+
+  // Nicht-ausgewählte gefilterte Arten für Keyboard-Navigation
+  const sichtbareArten = gefilterteArten.filter(
+    (a) => !ausgewaehlteArten.includes(a.id)
+  );
 
   return (
     <div>
@@ -188,15 +348,43 @@ export default function NeuePage() {
 
         {/* Ort & Land */}
         <div className="flex flex-col sm:flex-row gap-3">
-          <div className="flex-1">
+          <div className="flex-1 relative">
             <label className="block text-sm font-medium mb-1">Ort</label>
             <input
+              ref={ortRef}
               type="text"
               value={ort}
-              onChange={(e) => setOrt(e.target.value)}
+              onChange={(e) => {
+                setOrt(e.target.value);
+                setOrtOffen(true);
+              }}
+              onFocus={() => setOrtOffen(true)}
+              onKeyDown={handleOrtKeyDown}
               placeholder="z.B. Bodensee, Ufer Ost"
+              autoComplete="off"
               className="border border-stone-300 rounded px-3 py-2 w-full focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+            {ortOffen && gefilterteOrte.length > 0 && (
+              <div
+                ref={ortDropdownRef}
+                className="absolute z-20 left-0 right-0 top-full mt-1 bg-white border border-stone-300 rounded shadow-lg max-h-48 overflow-y-auto"
+              >
+                {gefilterteOrte.map((o, i) => (
+                  <button
+                    key={o.ort}
+                    onClick={() => waehleOrt(o)}
+                    className={`block w-full text-left px-3 py-2 text-sm transition-colors ${
+                      i === ortIndex
+                        ? "bg-emerald-50 text-emerald-800"
+                        : "hover:bg-stone-50"
+                    }`}
+                  >
+                    <span className="font-medium">{o.ort}</span>
+                    <span className="text-stone-400 ml-2 text-xs">({o.land})</span>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
           <div className="w-24">
             <label className="block text-sm font-medium mb-1">Land</label>
@@ -219,7 +407,8 @@ export default function NeuePage() {
             type="text"
             value={suchbegriff}
             onChange={(e) => setSuchbegriff(e.target.value)}
-            placeholder="Suchen..."
+            onKeyDown={handleArtenKeyDown}
+            placeholder="Suchen und Enter zum Hinzufügen..."
             className="border border-stone-300 rounded px-3 py-2 w-full max-w-md mb-2 focus:outline-none focus:ring-2 focus:ring-emerald-500"
           />
 
@@ -263,53 +452,46 @@ export default function NeuePage() {
             </div>
           )}
 
-          <div className="border border-stone-300 rounded max-h-60 overflow-y-auto">
-            {gefilterteArten.map((art) => (
-              <button
-                key={art.id}
-                onClick={() => toggleArt(art.id)}
-                className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-stone-100 transition-colors ${
-                  ausgewaehlteArten.includes(art.id)
-                    ? "bg-emerald-50 text-emerald-800 font-medium"
-                    : ""
-                }`}
-              >
-                {ausgewaehlteArten.includes(art.id) ? "✓ " : ""}
-                {art.name}
-              </button>
-            ))}
+          <div
+            ref={artenListeRef}
+            className="border border-stone-300 rounded max-h-60 overflow-y-auto"
+          >
+            {gefilterteArten.map((art) => {
+              const istAusgewaehlt = ausgewaehlteArten.includes(art.id);
+              const sichtbarerIndex = istAusgewaehlt
+                ? -1
+                : sichtbareArten.indexOf(art);
+              const istHighlighted = !istAusgewaehlt && sichtbarerIndex === artenIndex;
+              return (
+                <button
+                  key={art.id}
+                  data-art-item
+                  onClick={() => toggleArt(art.id)}
+                  className={`block w-full text-left px-3 py-1.5 text-sm transition-colors ${
+                    istAusgewaehlt
+                      ? "bg-emerald-50 text-emerald-800 font-medium"
+                      : istHighlighted
+                        ? "bg-emerald-100 text-emerald-900"
+                        : "hover:bg-stone-100"
+                  }`}
+                >
+                  {istAusgewaehlt ? "✓ " : ""}
+                  {art.name}
+                </button>
+              );
+            })}
             {gefilterteArten.length === 0 && suchbegriff.trim() && (
               <div className="px-3 py-2">
                 <p className="text-sm text-stone-500 mb-1">
                   Keine Vogelart gefunden.
                 </p>
                 <button
-                  onClick={async () => {
-                    const name = suchbegriff.trim();
-                    if (online) {
-                      const { data, error } = await supabase
-                        .from("vogelarten")
-                        .insert({ name })
-                        .select("id, name")
-                        .single();
-                      if (!error && data) {
-                        setVogelarten((prev) =>
-                          [...prev, data].sort((a, b) =>
-                            a.name.localeCompare(b.name)
-                          )
-                        );
-                        toggleArt(data.id);
-                      }
-                    } else {
-                      setNeueArtenNamen((prev) => [...prev, name]);
-                    }
-                    setSuchbegriff("");
-                    setTimeout(() => suchfeldRef.current?.focus(), 0);
-                  }}
+                  onClick={handleNeueArt}
                   className="text-sm text-emerald-700 font-medium hover:text-emerald-900"
                 >
                   + &quot;{suchbegriff.trim()}&quot; als neue Vogelart
                   hinzufügen
+                  <span className="text-stone-400 ml-1 text-xs">(Enter)</span>
                 </button>
               </div>
             )}
