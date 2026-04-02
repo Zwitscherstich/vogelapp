@@ -311,6 +311,101 @@ export default function DashboardPage() {
       alleSaisons.add(s);
     }
 
+    // --- Challenge-Daten berechnen ---
+
+    // Tägliche Streak (für Challenge-Meilensteine)
+    let maxStreakTage = 0;
+    let aktStreakTage = 1;
+    for (let i = 1; i < einzigartigeDaten.length; i++) {
+      const prev = new Date(einzigartigeDaten[i - 1] + "T00:00:00");
+      const curr = new Date(einzigartigeDaten[i] + "T00:00:00");
+      const diff = (curr.getTime() - prev.getTime()) / 86400000;
+      if (diff === 1) {
+        aktStreakTage++;
+      } else {
+        maxStreakTage = Math.max(maxStreakTage, aktStreakTage);
+        aktStreakTage = 1;
+      }
+    }
+    maxStreakTage = Math.max(maxStreakTage, aktStreakTage);
+
+    // Eisvogel-Sichtungen
+    const eisvogelName = "Eisvogel";
+    const eisvogelSichtungen = beobachtungen.filter((b) =>
+      b.vogelarten.some((a) => a.toLowerCase() === eisvogelName.toLowerCase())
+    );
+    const eisvogelOrte = new Set(eisvogelSichtungen.map((b) => b.ort));
+    const eisvogelMonate = new Set(
+      eisvogelSichtungen.map((b) => new Date(b.datum + "T00:00:00").getMonth())
+    );
+
+    // Max Arten in einer einzelnen Beobachtung
+    const maxArtenEinBeob = Math.max(0, ...beobachtungen.map((b) => b.vogelarten.length));
+
+    // Wochenend-Beobachtungen (Sa + So)
+    const wochenendBeob = beobachtungen.filter((b) => {
+      const d = new Date(b.datum + "T00:00:00").getDay();
+      return d === 0 || d === 6;
+    });
+
+    // Frühaufsteher: Beobachtungen im Januar/Februar (Winterbeobachter)
+    const winterBeob = beobachtungen.filter((b) => {
+      const m = new Date(b.datum + "T00:00:00").getMonth();
+      return m === 0 || m === 1 || m === 11;
+    });
+
+    // Verschiedene Monate mit Beobachtungen (alle 12?)
+    const beobMonateSet = new Set(
+      beobachtungen.map((b) => new Date(b.datum + "T00:00:00").getMonth())
+    );
+
+    // Greifvögel
+    const greifvoegel = ["Mäusebussard", "Sperber", "Habicht", "Turmfalke", "Wanderfalke",
+      "Rotmilan", "Schwarzmilan", "Seeadler", "Steinadler", "Fischadler",
+      "Wespenbussard", "Kornweihe", "Rohrweihe", "Baumfalke", "Merlin"];
+    const gesichteteGreifvoegel = greifvoegel.filter((g) =>
+      [...alleArten].some((a) => a.toLowerCase() === g.toLowerCase())
+    );
+
+    // Spechte
+    const spechte = ["Buntspecht", "Grünspecht", "Schwarzspecht", "Kleinspecht",
+      "Mittelspecht", "Dreizehenspecht", "Weißrückenspecht", "Grauspecht", "Wendehals"];
+    const gesichteteSpechte = spechte.filter((s) =>
+      [...alleArten].some((a) => a.toLowerCase() === s.toLowerCase())
+    );
+
+    // Eulen
+    const eulen = ["Waldkauz", "Waldohreule", "Uhu", "Schleiereule", "Steinkauz",
+      "Zwergohreule", "Sumpfohreule", "Sperlingskauz", "Raufußkauz"];
+    const gesichteteEulen = eulen.filter((e) =>
+      [...alleArten].some((a) => a.toLowerCase() === e.toLowerCase())
+    );
+
+    // An einem Ort 5+ Arten in einer Beobachtung
+    const reicheBeob = beobachtungen.filter((b) => b.vogelarten.length >= 5);
+
+    // Gleicher Ort in verschiedenen Monaten (Treue)
+    const ortMonate = new Map<string, Set<number>>();
+    for (const b of beobachtungen) {
+      const monat = new Date(b.datum + "T00:00:00").getMonth();
+      const set = ortMonate.get(b.ort) ?? new Set();
+      set.add(monat);
+      ortMonate.set(b.ort, set);
+    }
+    const maxOrtMonate = Math.max(0, ...[...ortMonate.values()].map((s) => s.size));
+
+    // Neujahrsbeobachtung (1. Januar)
+    const neujahrBeob = beobachtungen.some((b) => b.datum.endsWith("-01-01"));
+
+    // Wasservögel
+    const wasservoegel = ["Stockente", "Reiherente", "Blässhuhn", "Teichhuhn", "Graureiher",
+      "Haubentaucher", "Kormoran", "Höckerschwan", "Graugans", "Kanadagans",
+      "Nilgans", "Schnatterente", "Krickente", "Tafelente", "Schellente",
+      "Gänsesäger", "Zwergtaucher", "Lachmöwe", "Silbermöwe", "Mandarinente"];
+    const gesichteteWasservoegel = wasservoegel.filter((w) =>
+      [...alleArten].some((a) => a.toLowerCase() === w.toLowerCase())
+    );
+
     // Meilenstein-System mit Tiers
     interface Meilenstein {
       id: string;
@@ -321,18 +416,22 @@ export default function DashboardPage() {
       bedingung: number;
       aktuell: number;
       erreicht: boolean;
+      geheim?: boolean;
+      tipp?: string;
     }
 
     const alleMeilensteine: Meilenstein[] = [
-      // Bronze
+      // === Bronze ===
       { id: "b1", name: "Erster Blick", beschreibung: "Erste Beobachtung", icon: "👀", tier: "bronze", bedingung: 1, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 1 },
       { id: "b2", name: "Handvoll", beschreibung: "5 Vogelarten entdeckt", icon: "🖐️", tier: "bronze", bedingung: 5, aktuell: alleArten.size, erreicht: alleArten.size >= 5 },
       { id: "b3", name: "Stammgast", beschreibung: "10 Beobachtungen", icon: "📝", tier: "bronze", bedingung: 10, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 10 },
       { id: "b4", name: "Artenjäger", beschreibung: "10 Vogelarten entdeckt", icon: "🔍", tier: "bronze", bedingung: 10, aktuell: alleArten.size, erreicht: alleArten.size >= 10 },
       { id: "b5", name: "Entdecker", beschreibung: "3 verschiedene Orte", icon: "🗺️", tier: "bronze", bedingung: 3, aktuell: orte.size, erreicht: orte.size >= 3 },
       { id: "b6", name: "Wochenstart", beschreibung: "2 Wochen am Stück", icon: "📅", tier: "bronze", bedingung: 2, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 2 },
+      { id: "b7", name: "Doppeltag", beschreibung: "2 Tage am Stück beobachten", icon: "📆", tier: "bronze", bedingung: 2, aktuell: maxStreakTage, erreicht: maxStreakTage >= 2 },
+      { id: "b8", name: "Wochenende", beschreibung: "5 Wochenend-Beobachtungen", icon: "🌅", tier: "bronze", bedingung: 5, aktuell: wochenendBeob.length, erreicht: wochenendBeob.length >= 5 },
 
-      // Silber
+      // === Silber ===
       { id: "s1", name: "Kennerblick", beschreibung: "25 Vogelarten entdeckt", icon: "🦅", tier: "silber", bedingung: 25, aktuell: alleArten.size, erreicht: alleArten.size >= 25 },
       { id: "s2", name: "Routinier", beschreibung: "25 Beobachtungen", icon: "📋", tier: "silber", bedingung: 25, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 25 },
       { id: "s3", name: "Wandervogel", beschreibung: "5 verschiedene Orte", icon: "🥾", tier: "silber", bedingung: 5, aktuell: orte.size, erreicht: orte.size >= 5 },
@@ -340,8 +439,11 @@ export default function DashboardPage() {
       { id: "s5", name: "Monatsmarathon", beschreibung: "4 Wochen am Stück", icon: "🔥", tier: "silber", bedingung: 4, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 4 },
       { id: "s6", name: "Fleißig", beschreibung: "50 Beobachtungen", icon: "⭐", tier: "silber", bedingung: 50, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 50 },
       { id: "s7", name: "Jahreszeiten", beschreibung: "In allen 4 Saisons beobachtet", icon: "🌍", tier: "silber", bedingung: 4, aktuell: alleSaisons.size, erreicht: alleSaisons.size >= 4 },
+      { id: "s8", name: "Dreitageswanderung", beschreibung: "3 Tage am Stück beobachten", icon: "🥾", tier: "silber", bedingung: 3, aktuell: maxStreakTage, erreicht: maxStreakTage >= 3 },
+      { id: "s9", name: "Artenreichtum", beschreibung: "5+ Arten in einer Beobachtung", icon: "🌿", tier: "silber", bedingung: 5, aktuell: maxArtenEinBeob, erreicht: maxArtenEinBeob >= 5 },
+      { id: "s10", name: "Wasserfreund", beschreibung: "5 Wasservogelarten entdeckt", icon: "🦆", tier: "silber", bedingung: 5, aktuell: gesichteteWasservoegel.length, erreicht: gesichteteWasservoegel.length >= 5 },
 
-      // Gold
+      // === Gold ===
       { id: "g1", name: "Ornithologe", beschreibung: "50 Vogelarten entdeckt", icon: "🏅", tier: "gold", bedingung: 50, aktuell: alleArten.size, erreicht: alleArten.size >= 50 },
       { id: "g2", name: "Tagebuch-Profi", beschreibung: "100 Beobachtungen", icon: "📖", tier: "gold", bedingung: 100, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 100 },
       { id: "g3", name: "Reisender", beschreibung: "10 verschiedene Orte", icon: "🧭", tier: "gold", bedingung: 10, aktuell: orte.size, erreicht: orte.size >= 10 },
@@ -349,21 +451,45 @@ export default function DashboardPage() {
       { id: "g5", name: "Quartalsjäger", beschreibung: "8 Wochen am Stück", icon: "💎", tier: "gold", bedingung: 8, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 8 },
       { id: "g6", name: "Artensammler", beschreibung: "75 Vogelarten entdeckt", icon: "🦉", tier: "gold", bedingung: 75, aktuell: alleArten.size, erreicht: alleArten.size >= 75 },
       { id: "g7", name: "Kartograph", beschreibung: "15 verschiedene Orte", icon: "📌", tier: "gold", bedingung: 15, aktuell: orte.size, erreicht: orte.size >= 15 },
+      { id: "g8", name: "Intensivwoche", beschreibung: "5 Tage am Stück beobachten", icon: "🗓️", tier: "gold", bedingung: 5, aktuell: maxStreakTage, erreicht: maxStreakTage >= 5 },
+      { id: "g9", name: "Spechtologe", beschreibung: "3 Spechtarten entdeckt", icon: "🪶", tier: "gold", bedingung: 3, aktuell: gesichteteSpechte.length, erreicht: gesichteteSpechte.length >= 3 },
+      { id: "g10", name: "Stammplatz", beschreibung: "Einen Ort in 6 verschiedenen Monaten besucht", icon: "🏠", tier: "gold", bedingung: 6, aktuell: maxOrtMonate, erreicht: maxOrtMonate >= 6 },
+      { id: "g11", name: "Falknerauge", beschreibung: "3 Greifvogelarten entdeckt", icon: "🦅", tier: "gold", bedingung: 3, aktuell: gesichteteGreifvoegel.length, erreicht: gesichteteGreifvoegel.length >= 3 },
+      { id: "g12", name: "Ganzjährig", beschreibung: "In allen 12 Monaten beobachtet", icon: "📊", tier: "gold", bedingung: 12, aktuell: beobMonateSet.size, erreicht: beobMonateSet.size >= 12 },
+      { id: "g13", name: "Vielfalt", beschreibung: "8+ Arten in einer Beobachtung", icon: "🌈", tier: "gold", bedingung: 8, aktuell: maxArtenEinBeob, erreicht: maxArtenEinBeob >= 8 },
 
-      // Diamant
+      // === Diamant ===
       { id: "d1", name: "Centurion", beschreibung: "100 Vogelarten entdeckt", icon: "💯", tier: "diamant", bedingung: 100, aktuell: alleArten.size, erreicht: alleArten.size >= 100 },
       { id: "d2", name: "Chronist", beschreibung: "200 Beobachtungen", icon: "📚", tier: "diamant", bedingung: 200, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 200 },
       { id: "d3", name: "Globetrotter", beschreibung: "25 verschiedene Orte", icon: "🌎", tier: "diamant", bedingung: 25, aktuell: orte.size, erreicht: orte.size >= 25 },
       { id: "d4", name: "Weltenbummler", beschreibung: "5 Länder besucht", icon: "🗺️", tier: "diamant", bedingung: 5, aktuell: laender.size, erreicht: laender.size >= 5 },
       { id: "d5", name: "Halbjahreslauf", beschreibung: "12 Wochen am Stück", icon: "🏆", tier: "diamant", bedingung: 12, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 12 },
       { id: "d6", name: "Meisterbeobachter", beschreibung: "150 Vogelarten entdeckt", icon: "🔭", tier: "diamant", bedingung: 150, aktuell: alleArten.size, erreicht: alleArten.size >= 150 },
+      { id: "d7", name: "Marathonwoche", beschreibung: "7 Tage am Stück beobachten", icon: "🏃", tier: "diamant", bedingung: 7, aktuell: maxStreakTage, erreicht: maxStreakTage >= 7 },
+      { id: "d8", name: "Greifvogel-Experte", beschreibung: "6 Greifvogelarten entdeckt", icon: "🦅", tier: "diamant", bedingung: 6, aktuell: gesichteteGreifvoegel.length, erreicht: gesichteteGreifvoegel.length >= 6 },
+      { id: "d9", name: "Seenplatte", beschreibung: "10 Wasservogelarten entdeckt", icon: "🏞️", tier: "diamant", bedingung: 10, aktuell: gesichteteWasservoegel.length, erreicht: gesichteteWasservoegel.length >= 10 },
+      { id: "d10", name: "Heimatort", beschreibung: "Einen Ort in 10 verschiedenen Monaten besucht", icon: "💚", tier: "diamant", bedingung: 10, aktuell: maxOrtMonate, erreicht: maxOrtMonate >= 10 },
+      { id: "d11", name: "Artenexplosion", beschreibung: "12+ Arten in einer Beobachtung", icon: "💥", tier: "diamant", bedingung: 12, aktuell: maxArtenEinBeob, erreicht: maxArtenEinBeob >= 12 },
 
-      // Legendär
+      // === Legendär ===
       { id: "l1", name: "Legende", beschreibung: "200 Vogelarten entdeckt", icon: "👑", tier: "legendaer", bedingung: 200, aktuell: alleArten.size, erreicht: alleArten.size >= 200 },
       { id: "l2", name: "Enzyklopädie", beschreibung: "500 Beobachtungen", icon: "🏛️", tier: "legendaer", bedingung: 500, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 500 },
       { id: "l3", name: "Nomade", beschreibung: "50 verschiedene Orte", icon: "⛰️", tier: "legendaer", bedingung: 50, aktuell: orte.size, erreicht: orte.size >= 50 },
       { id: "l4", name: "Jahreslauf", beschreibung: "26 Wochen am Stück", icon: "🌟", tier: "legendaer", bedingung: 26, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 26 },
       { id: "l5", name: "Unsterblich", beschreibung: "1000 Beobachtungen", icon: "🔱", tier: "legendaer", bedingung: 1000, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 1000 },
+      { id: "l6", name: "Zwei-Wochen-Expedition", beschreibung: "14 Tage am Stück beobachten", icon: "⛺", tier: "legendaer", bedingung: 14, aktuell: maxStreakTage, erreicht: maxStreakTage >= 14 },
+
+      // === Geheim ===
+      { id: "x1", name: "Eisvogel-Jäger", beschreibung: "Ersten Eisvogel gesichtet", icon: "💎", tier: "silber", bedingung: 1, aktuell: eisvogelSichtungen.length, erreicht: eisvogelSichtungen.length >= 1, geheim: true, tipp: "Der fliegende Edelstein wartet an ruhigen Gewässern..." },
+      { id: "x2", name: "Eisvogel-Kenner", beschreibung: "Eisvogel an 3 Orten gesichtet", icon: "💎", tier: "gold", bedingung: 3, aktuell: eisvogelOrte.size, erreicht: eisvogelOrte.size >= 3, geheim: true, tipp: "Suche den Edelstein an verschiedenen Ufern" },
+      { id: "x3", name: "Eisvogel-Meister", beschreibung: "Eisvogel in 4 Jahreszeiten gesichtet", icon: "💎", tier: "diamant", bedingung: 4, aktuell: eisvogelMonate.size >= 3 ? Math.min(eisvogelMonate.size, 4) : eisvogelMonate.size, erreicht: eisvogelMonate.size >= 4, geheim: true, tipp: "Folge dem Edelstein durch alle Jahreszeiten" },
+      { id: "x4", name: "Eisvogel-Legende", beschreibung: "Eisvogel 10× gesichtet", icon: "👑", tier: "legendaer", bedingung: 10, aktuell: eisvogelSichtungen.length, erreicht: eisvogelSichtungen.length >= 10, geheim: true, tipp: "Der Edelstein hat dich akzeptiert" },
+      { id: "x5", name: "Neujahrs-Birder", beschreibung: "Beobachtung am 1. Januar", icon: "🎆", tier: "gold", bedingung: 1, aktuell: neujahrBeob ? 1 : 0, erreicht: neujahrBeob, geheim: true, tipp: "Starte das Jahr mit Vogelgesang" },
+      { id: "x6", name: "Winterhart", beschreibung: "15 Winterbeobachtungen (Dez-Feb)", icon: "🥶", tier: "gold", bedingung: 15, aktuell: winterBeob.length, erreicht: winterBeob.length >= 15, geheim: true, tipp: "Auch in der kalten Jahreszeit gibt es viel zu sehen" },
+      { id: "x7", name: "Nachtaktiv", beschreibung: "Eine Eulenart entdeckt", icon: "🦉", tier: "silber", bedingung: 1, aktuell: gesichteteEulen.length, erreicht: gesichteteEulen.length >= 1, geheim: true, tipp: "Manche Vögel zeigen sich erst in der Dämmerung" },
+      { id: "x8", name: "Eulenflüsterer", beschreibung: "3 Eulenarten entdeckt", icon: "🌙", tier: "diamant", bedingung: 3, aktuell: gesichteteEulen.length, erreicht: gesichteteEulen.length >= 3, geheim: true, tipp: "Schuhuu... wer ruft da im Wald?" },
+      { id: "x9", name: "Safari", beschreibung: "10 Beobachtungen mit 5+ Arten", icon: "🌄", tier: "gold", bedingung: 10, aktuell: reicheBeob.length, erreicht: reicheBeob.length >= 10, geheim: true, tipp: "Suche Orte mit besonders vielen verschiedenen Arten" },
+      { id: "x10", name: "Wochenendkrieger", beschreibung: "20 Wochenend-Beobachtungen", icon: "⚔️", tier: "gold", bedingung: 20, aktuell: wochenendBeob.length, erreicht: wochenendBeob.length >= 20, geheim: true, tipp: "Nutze jedes freie Wochenende für die Natur" },
     ];
 
     // Seltenste Arten (nur 1x gesehen)
@@ -984,6 +1110,8 @@ interface MeilensteinTyp {
   bedingung: number;
   aktuell: number;
   erreicht: boolean;
+  geheim?: boolean;
+  tipp?: string;
 }
 
 const TIER_CONFIG = {
@@ -997,16 +1125,22 @@ const TIER_CONFIG = {
 const TIER_ORDER: Array<"bronze" | "silber" | "gold" | "diamant" | "legendaer"> = ["bronze", "silber", "gold", "diamant", "legendaer"];
 
 function MeilensteinSektion({ meilensteine }: { meilensteine: MeilensteinTyp[] }) {
-  const [tab, setTab] = useState<"alle" | "erreicht" | "offen">("alle");
+  const [tab, setTab] = useState<"alle" | "erreicht" | "offen" | "geheim">("alle");
 
-  const erreichte = meilensteine.filter((m) => m.erreicht);
-  const offene = meilensteine.filter((m) => !m.erreicht);
+  const normale = meilensteine.filter((m) => !m.geheim);
+  const geheime = meilensteine.filter((m) => m.geheim);
+  const erreichte = normale.filter((m) => m.erreicht);
+  const offene = normale.filter((m) => !m.erreicht);
+  const geheimerreicht = geheime.filter((m) => m.erreicht);
   const naechste = offene
     .map((m) => ({ ...m, fortschritt: m.aktuell / m.bedingung }))
     .sort((a, b) => b.fortschritt - a.fortschritt)
     .slice(0, 3);
 
-  const anzeigeListe = tab === "erreicht" ? erreichte : tab === "offen" ? offene : meilensteine;
+  const anzeigeListe = tab === "erreicht" ? erreichte
+    : tab === "offen" ? offene
+    : tab === "geheim" ? geheime
+    : normale;
 
   // Nach Tier gruppieren
   const gruppiert = TIER_ORDER.map((tier) => ({
@@ -1020,7 +1154,7 @@ function MeilensteinSektion({ meilensteine }: { meilensteine: MeilensteinTyp[] }
       <div className="flex items-center justify-between mb-1">
         <h2 className="font-semibold text-stone-800">Meilensteine</h2>
         <span className="text-sm text-emerald-600 font-medium">
-          {erreichte.length} / {meilensteine.length}
+          {erreichte.length + geheimerreicht.length} / {meilensteine.length}
         </span>
       </div>
 
@@ -1028,7 +1162,7 @@ function MeilensteinSektion({ meilensteine }: { meilensteine: MeilensteinTyp[] }
       <div className="h-2 bg-stone-100 rounded-full overflow-hidden mb-4">
         <div
           className="h-full bg-gradient-to-r from-emerald-400 to-emerald-600 rounded-full transition-all"
-          style={{ width: `${(erreichte.length / meilensteine.length) * 100}%` }}
+          style={{ width: `${((erreichte.length + geheimerreicht.length) / meilensteine.length) * 100}%` }}
         />
       </div>
 
@@ -1066,11 +1200,12 @@ function MeilensteinSektion({ meilensteine }: { meilensteine: MeilensteinTyp[] }
       )}
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4">
+      <div className="flex gap-1 mb-4 flex-wrap">
         {([
-          { key: "alle" as const, label: `Alle (${meilensteine.length})` },
+          { key: "alle" as const, label: `Alle (${normale.length})` },
           { key: "erreicht" as const, label: `Erreicht (${erreichte.length})` },
           { key: "offen" as const, label: `Offen (${offene.length})` },
+          { key: "geheim" as const, label: `Geheim (${geheimerreicht.length}/${geheime.length})` },
         ]).map((t) => (
           <button
             key={t.key}
@@ -1096,31 +1231,36 @@ function MeilensteinSektion({ meilensteine }: { meilensteine: MeilensteinTyp[] }
                 {config.label}
               </span>
               <span className="text-[10px] text-stone-400">
-                {items.filter((m) => m.erreicht).length} / {meilensteine.filter((m) => m.tier === tier).length}
+                {items.filter((m) => m.erreicht).length} / {items.length}
               </span>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
               {items.map((m) => {
                 const prozent = Math.min(Math.round((m.aktuell / m.bedingung) * 100), 100);
+                const istGeheimVersteckt = m.geheim && !m.erreicht;
                 return (
                   <div
                     key={m.id}
                     className={`rounded-lg p-2.5 border text-center transition-all ${
                       m.erreicht
                         ? `${config.bg} ring-1 ${config.ring}`
-                        : "bg-stone-50 border-stone-150 opacity-60"
+                        : istGeheimVersteckt
+                          ? "bg-stone-100 border-stone-200 border-dashed"
+                          : "bg-stone-50 border-stone-150 opacity-60"
                     }`}
                   >
-                    <span className={`text-xl ${m.erreicht ? "" : "grayscale opacity-50"}`}>
-                      {m.icon}
+                    <span className={`text-xl ${m.erreicht ? "" : istGeheimVersteckt ? "grayscale" : "grayscale opacity-50"}`}>
+                      {istGeheimVersteckt ? "❓" : m.icon}
                     </span>
                     <p className={`text-xs font-medium mt-1 ${m.erreicht ? config.text : "text-stone-400"}`}>
-                      {m.name}
+                      {istGeheimVersteckt ? "???" : m.name}
                     </p>
-                    <p className="text-[10px] text-stone-400 mt-0.5 leading-tight">
-                      {m.beschreibung}
+                    <p className="text-[10px] text-stone-400 mt-0.5 leading-tight italic">
+                      {istGeheimVersteckt
+                        ? (m.tipp ?? "Weiter beobachten...")
+                        : m.beschreibung}
                     </p>
-                    {!m.erreicht && (
+                    {!m.erreicht && !istGeheimVersteckt && (
                       <div className="mt-1.5">
                         <div className="h-1 bg-stone-200 rounded-full overflow-hidden">
                           <div
