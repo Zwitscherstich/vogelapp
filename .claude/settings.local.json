@@ -39,7 +39,26 @@
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" repo create vogelapp --public --source=. --remote=origin --push)",
       "Bash(\"/c/Program Files/GitHub CLI/gh.exe\" auth setup-git)",
       "Bash(git push:*)",
-      "Bash(npm uninstall:*)"
+      "Bash(npm uninstall:*)",
+      "WebSearch",
+      "Bash(find /c/Users/Philipp/vogelapp -type f \\\\\\(-name *.sql -o -name *migration* -o -name *seed* -o -name *.ts -o -name *.js -o -name *.json \\\\\\))",
+      "Bash(xargs ls:*)",
+      "WebFetch(domain:de.wikipedia.org)",
+      "WebFetch(domain:en.wikipedia.org)",
+      "WebFetch(domain:www.nabu.de)",
+      "Bash(npx next:*)",
+      "Bash(node_modules/.bin/next build:*)",
+      "Bash(where node:*)",
+      "Bash(where npm:*)",
+      "Bash(PATH=\"/c/Program Files/nodejs:$PATH\")",
+      "Bash(node node_modules/.bin/next build)",
+      "Bash(node node_modules/next/dist/bin/next build)",
+      "Bash(xargs grep:*)",
+      "Bash(export PATH=\"$PATH:/c/Program Files/nodejs:/c/Users/Philipp/AppData/Roaming/npm\")",
+      "Bash(npx tsc:*)",
+      "Bash(npm.cmd run:*)",
+      "Bash(/c/Program Files/nodejs/npm.cmd run build)",
+      "Bash(cmd.exe /c \"cd C:\\\\Users\\\\Philipp\\\\vogelapp && npm run build 2>&1\")"
     ]
   }
 }

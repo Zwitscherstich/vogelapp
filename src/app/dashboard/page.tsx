@@ -392,9 +392,9 @@ export default function DashboardPage() {
       ...artenLower.filter((a) => eulenEinzel.includes(a)),
     ].filter((v, i, arr) => arr.indexOf(v) === i);
 
-    // Wasservögel: Enten, Gänse, Schwäne, Taucher, Möwen, Reiher, etc.
-    const wasservogelMuster = ["ente", "gans", "schwan", "taucher", "möwe", "reiher", "säger", "kormoran"];
-    const wasservogelEinzel = ["blässhuhn", "teichhuhn", "wasseramsel"];
+    // Wasservögel: Enten, Gänse, Schwäne, Taucher, Möwen, Reiher, Seeschwalben, etc.
+    const wasservogelMuster = ["ente", "gans", "schwan", "taucher", "möwe", "reiher", "säger", "kormoran", "seeschwalbe", "strandläufer"];
+    const wasservogelEinzel = ["blässhuhn", "teichhuhn", "wasseramsel", "wasserralle", "löffler", "rohrdommel", "zwergdommel", "austernfischer", "säbelschnäbler", "stelzenläufer", "kiebitz", "kampfläufer", "knutt", "sanderling", "bekassine", "uferschnepfe", "pfuhlschnepfe", "waldschnepfe", "zwergschnepfe", "bruchwasserläufer", "dunkelwasserläufer", "waldwasserläufer", "teichwasserläufer", "flussuferläufer", "rotschenkel", "grünschenkel", "goldregenpfeifer", "flussregenpfeifer", "sandregenpfeifer", "seeregenpfeifer", "mornellregenpfeifer", "kiebitzregenpfeifer"];
     const gesichteteWasservoegel = [
       ...matcheGruppe(wasservogelMuster),
       ...artenLower.filter((a) => wasservogelEinzel.includes(a)),
@@ -488,6 +488,7 @@ export default function DashboardPage() {
       { id: "l4", name: "Jahreslauf", beschreibung: "26 Wochen am Stück", icon: "🌟", tier: "legendaer", bedingung: 26, aktuell: maxStreakWochen, erreicht: maxStreakWochen >= 26 },
       { id: "l5", name: "Unsterblich", beschreibung: "1000 Beobachtungen", icon: "🔱", tier: "legendaer", bedingung: 1000, aktuell: beobachtungen.length, erreicht: beobachtungen.length >= 1000 },
       { id: "l6", name: "Zwei-Wochen-Expedition", beschreibung: "14 Tage am Stück beobachten", icon: "⛺", tier: "legendaer", bedingung: 14, aktuell: maxStreakTage, erreicht: maxStreakTage >= 14 },
+      { id: "l7", name: "Großmeister", beschreibung: "250 Vogelarten entdeckt", icon: "🏆", tier: "legendaer", bedingung: 250, aktuell: alleArten.size, erreicht: alleArten.size >= 250 },
 
       // === Geheim ===
       { id: "x1", name: "Eisvogel-Jäger", beschreibung: "Ersten Eisvogel gesichtet", icon: "💎", tier: "silber", bedingung: 1, aktuell: eisvogelSichtungen.length, erreicht: eisvogelSichtungen.length >= 1, geheim: true, tipp: "Der fliegende Edelstein wartet an ruhigen Gewässern..." },

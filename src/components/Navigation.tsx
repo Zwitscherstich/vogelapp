@@ -1,12 +1,43 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  istAktiviert,
+  setAktiviert,
+  requestPermission,
+  scheduleWochenerinnerung,
+} from "@/lib/notifications";
 
 export default function Navigation() {
   const [offen, setOffen] = useState(false);
   const pathname = usePathname();
+
+  const [benachrichtigungenAktiv, setBenachrichtigungenAktiv] = useState(false);
+  const [benachrichtigungenUnterstuetzt, setBenachrichtigungenUnterstuetzt] =
+    useState(false);
+
+  useEffect(() => {
+    setBenachrichtigungenUnterstuetzt("Notification" in window);
+    setBenachrichtigungenAktiv(
+      istAktiviert() && "Notification" in window && Notification.permission === "granted"
+    );
+  }, []);
+
+  async function toggleBenachrichtigungen() {
+    if (benachrichtigungenAktiv) {
+      setAktiviert(false);
+      setBenachrichtigungenAktiv(false);
+    } else {
+      const granted = await requestPermission();
+      if (granted) {
+        setAktiviert(true);
+        setBenachrichtigungenAktiv(true);
+        await scheduleWochenerinnerung();
+      }
+    }
+  }
 
   const links = [
     { href: "/", label: "Neue Beobachtung", icon: "+" },
@@ -23,7 +54,7 @@ export default function Navigation() {
         </Link>
 
         {/* Desktop-Menü */}
-        <div className="hidden sm:flex gap-4 text-sm">
+        <div className="hidden sm:flex items-center gap-4 text-sm">
           {links.map((link) => (
             <Link
               key={link.href}
@@ -37,6 +68,23 @@ export default function Navigation() {
               {link.label}
             </Link>
           ))}
+          {benachrichtigungenUnterstuetzt && (
+            <button
+              onClick={toggleBenachrichtigungen}
+              title={
+                benachrichtigungenAktiv
+                  ? "Wochenerinnerungen aktiv – klicken zum Deaktivieren"
+                  : "Wochenerinnerungen aktivieren"
+              }
+              className={`text-lg transition-opacity ${
+                benachrichtigungenAktiv
+                  ? "opacity-100"
+                  : "opacity-40 hover:opacity-70"
+              }`}
+            >
+              {benachrichtigungenAktiv ? "🔔" : "🔕"}
+            </button>
+          )}
         </div>
 
         {/* Hamburger-Button (nur mobil) */}
@@ -74,6 +122,20 @@ export default function Navigation() {
               {link.icon} {link.label}
             </Link>
           ))}
+          {benachrichtigungenUnterstuetzt && (
+            <button
+              onClick={() => {
+                toggleBenachrichtigungen();
+                setOffen(false);
+              }}
+              className="block w-full text-left px-4 py-3 text-sm border-b border-stone-100 text-stone-600 hover:bg-stone-50 transition-colors"
+            >
+              {benachrichtigungenAktiv ? "🔔" : "🔕"}{" "}
+              {benachrichtigungenAktiv
+                ? "Wochenerinnerungen deaktivieren"
+                : "Wochenerinnerungen aktivieren"}
+            </button>
+          )}
         </div>
       )}
     </nav>

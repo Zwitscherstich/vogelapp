@@ -1,32 +1,11 @@
--- 1. Vogelarten-Tabelle
-CREATE TABLE vogelarten (
-  id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL UNIQUE
-);
+-- Migration: Vogelliste auf alle Mitteleuropa-Arten erweitern (NABU-Basis, 314 Arten)
+-- Dieses Script kann sicher mehrfach ausgeführt werden (ON CONFLICT DO NOTHING)
 
--- 2. Beobachtungen-Tabelle
-CREATE TABLE beobachtungen (
-  id SERIAL PRIMARY KEY,
-  datum DATE NOT NULL,
-  ort TEXT NOT NULL,
-  erstellt_am TIMESTAMPTZ DEFAULT NOW()
-);
+-- 1. Bestehende Namen standardisieren (NABU-Konvention)
+UPDATE vogelarten SET name = 'Gimpel' WHERE name = 'Dompfaff (Gimpel)';
+UPDATE vogelarten SET name = 'Stieglitz' WHERE name = 'Stieglitz (Distelfink)';
 
--- 3. Verknüpfung: welche Vogelarten bei welcher Beobachtung
-CREATE TABLE beobachtung_vogelarten (
-  id SERIAL PRIMARY KEY,
-  beobachtung_id INTEGER REFERENCES beobachtungen(id) ON DELETE CASCADE,
-  vogelart_id INTEGER REFERENCES vogelarten(id) ON DELETE CASCADE
-);
-
--- 4. Fotos-Tabelle
-CREATE TABLE fotos (
-  id SERIAL PRIMARY KEY,
-  beobachtung_id INTEGER REFERENCES beobachtungen(id) ON DELETE CASCADE,
-  url TEXT NOT NULL
-);
-
--- 5. Alle regelmäßig in Mitteleuropa vorkommenden Vogelarten (NABU-Basis, 314 Arten)
+-- 2. Alle Mitteleuropa-Arten hinzufügen (bereits existierende werden übersprungen)
 INSERT INTO vogelarten (name) VALUES
   ('Alpenbraunelle'), ('Alpendohle'), ('Alpenschneehuhn'), ('Alpensegler'), ('Alpenstrandläufer'),
   ('Amsel'), ('Auerhuhn'), ('Austernfischer'), ('Bachstelze'), ('Bartgeier'),
@@ -90,19 +69,5 @@ INSERT INTO vogelarten (name) VALUES
   ('Wiesenweihe'), ('Wintergoldhähnchen'), ('Zaunammer'), ('Zaunkönig'), ('Ziegenmelker'),
   ('Zilpzalp'), ('Zippammer'), ('Zitronengirlitz'), ('Zwergdommel'), ('Zwerggans'),
   ('Zwergmöwe'), ('Zwergsäger'), ('Zwergschnäpper'), ('Zwergschnepfe'), ('Zwergschwan'),
-  ('Zwergseeschwalbe'), ('Zwergstrandläufer'), ('Zwergsumpfhuhn'), ('Zwergtaucher');
-
--- 6. Row Level Security aktivieren (für öffentlichen Zugriff ohne Login)
-ALTER TABLE vogelarten ENABLE ROW LEVEL SECURITY;
-ALTER TABLE beobachtungen ENABLE ROW LEVEL SECURITY;
-ALTER TABLE beobachtung_vogelarten ENABLE ROW LEVEL SECURITY;
-ALTER TABLE fotos ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Vogelarten lesen" ON vogelarten FOR SELECT USING (true);
-CREATE POLICY "Vogelarten einfügen" ON vogelarten FOR INSERT WITH CHECK (true);
-CREATE POLICY "Beobachtungen lesen" ON beobachtungen FOR SELECT USING (true);
-CREATE POLICY "Beobachtungen einfügen" ON beobachtungen FOR INSERT WITH CHECK (true);
-CREATE POLICY "Beobachtung-Vogelarten lesen" ON beobachtung_vogelarten FOR SELECT USING (true);
-CREATE POLICY "Beobachtung-Vogelarten einfügen" ON beobachtung_vogelarten FOR INSERT WITH CHECK (true);
-CREATE POLICY "Fotos lesen" ON fotos FOR SELECT USING (true);
-CREATE POLICY "Fotos einfügen" ON fotos FOR INSERT WITH CHECK (true);
+  ('Zwergseeschwalbe'), ('Zwergstrandläufer'), ('Zwergsumpfhuhn'), ('Zwergtaucher')
+ON CONFLICT (name) DO NOTHING;

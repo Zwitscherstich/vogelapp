@@ -11,6 +11,7 @@ interface Beobachtung {
   datum: string;
   ort: string;
   land: string;
+  kommentar: string | null;
   vogelarten: string[];
   fotos: string[];
 }
@@ -33,7 +34,7 @@ export default function BeobachtungenPage() {
     const [beobResult, artenResult, fotosResult] = await Promise.all([
       supabase
         .from("beobachtungen")
-        .select("id, datum, ort, land")
+        .select("id, datum, ort, land, kommentar")
         .order("datum", { ascending: false }),
       supabase
         .from("beobachtung_vogelarten")
@@ -86,7 +87,8 @@ export default function BeobachtungenPage() {
     return (
       b.ort.toLowerCase().includes(s) ||
       b.datum.includes(s) ||
-      b.vogelarten.some((v) => v.toLowerCase().includes(s))
+      b.vogelarten.some((v) => v.toLowerCase().includes(s)) ||
+      (b.kommentar && b.kommentar.toLowerCase().includes(s))
     );
   });
 
@@ -227,6 +229,7 @@ export default function BeobachtungenPage() {
                       ort={b.ort}
                       land={b.land}
                       vorhandeneArten={b.vogelarten}
+                      kommentar={b.kommentar ?? ""}
                       onGespeichert={() => {
                         setBearbeitenId(null);
                         ladeBeobachtungen();
@@ -280,6 +283,11 @@ export default function BeobachtungenPage() {
                             </span>
                           ))}
                         </div>
+                      )}
+                      {b.kommentar && (
+                        <p className="text-sm text-stone-500 italic mt-2">
+                          {b.kommentar}
+                        </p>
                       )}
                       {b.fotos.length > 0 && (
                         <div className="flex gap-2 mt-3 flex-wrap">
