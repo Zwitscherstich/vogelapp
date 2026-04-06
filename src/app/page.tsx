@@ -50,6 +50,8 @@ export default function NeuePage() {
 
   const [entwurf, setEntwurf] = useState<Entwurf | null>(null);
   const [entwurfWiederhergestellt, setEntwurfWiederhergestellt] = useState(false);
+  // Prevents the initial onChange (with empty values) from wiping the draft
+  const entwurfGeladen = useRef(false);
 
   // Load draft on mount (client-only)
   useEffect(() => {
@@ -57,9 +59,10 @@ export default function NeuePage() {
     if (gespeicherter) {
       setEntwurf(gespeicherter);
       setEntwurfWiederhergestellt(true);
-      // Force BeobachtungFormular to re-mount with the draft as initial values
       setFormKey((k) => k + 1);
     }
+    // Mark as loaded so speicherEntwurf can start saving
+    entwurfGeladen.current = true;
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -99,7 +102,9 @@ export default function NeuePage() {
 
   function handleChange(daten: BeobachtungDaten) {
     datenRef.current = daten;
-    speicherEntwurf(daten);
+    if (entwurfGeladen.current) {
+      speicherEntwurf(daten);
+    }
   }
 
   function verwerfEntwurf() {
