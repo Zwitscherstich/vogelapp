@@ -377,54 +377,9 @@ export default function BeobachtungFormular({
           className={`border border-stone-300 rounded px-3 py-2 w-full max-w-md mb-2 focus:outline-none focus:ring-2 ${ring}`}
         />
 
-        {(ausgewaehlteArtenNamen.length > 0 || neueArtenNamen.length > 0) && (
-          <div className="flex flex-wrap gap-2 mb-2">
-            {ausgewaehlteArtenNamen.map((name) => (
-              <span
-                key={name}
-                className={`${pillBg} px-2 py-1 rounded text-sm flex items-center gap-1`}
-              >
-                {name}
-                <button
-                  onClick={() => {
-                    const id = vogelarten.find((a) => a.name === name)?.id;
-                    if (id !== undefined) {
-                      toggleArt(id);
-                    } else {
-                      // Vogelarten not loaded yet — remove by name directly
-                      setAusgewaehlteArtenNamen((prev) => prev.filter((n) => n !== name));
-                    }
-                  }}
-                  className={pillClose}
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            {neueArtenNamen.map((name, i) => (
-              <span
-                key={`new-${i}`}
-                className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm flex items-center gap-1"
-              >
-                {name} (neu)
-                <button
-                  onClick={() =>
-                    setNeueArtenNamen((prev) =>
-                      prev.filter((_, j) => j !== i)
-                    )
-                  }
-                  className="text-blue-600 hover:text-blue-800"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
         <div
           ref={artenListeRef}
-          className="border border-stone-300 rounded max-h-60 overflow-y-auto"
+          className="border border-stone-300 rounded max-h-60 overflow-y-auto mb-2"
         >
           {gefilterteArten.map((art) => {
             const istAusgewaehlt = ausgewaehlteArtenNamen.includes(art.name);
@@ -466,6 +421,50 @@ export default function BeobachtungFormular({
             </div>
           )}
         </div>
+
+        {(ausgewaehlteArtenNamen.length > 0 || neueArtenNamen.length > 0) && (
+          <div className="flex flex-wrap gap-2">
+            {ausgewaehlteArtenNamen.map((name) => (
+              <span
+                key={name}
+                className={`${pillBg} px-2 py-1 rounded text-sm flex items-center gap-1`}
+              >
+                {name}
+                <button
+                  onClick={() => {
+                    const id = vogelarten.find((a) => a.name === name)?.id;
+                    if (id !== undefined) {
+                      toggleArt(id);
+                    } else {
+                      setAusgewaehlteArtenNamen((prev) => prev.filter((n) => n !== name));
+                    }
+                  }}
+                  className={pillClose}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            {neueArtenNamen.map((name, i) => (
+              <span
+                key={`new-${i}`}
+                className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm flex items-center gap-1"
+              >
+                {name} (neu)
+                <button
+                  onClick={() =>
+                    setNeueArtenNamen((prev) =>
+                      prev.filter((_, j) => j !== i)
+                    )
+                  }
+                  className="text-blue-600 hover:text-blue-800"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Kommentar */}

@@ -242,11 +242,19 @@ export default function BeobachtungenPage() {
                       className="bg-white border border-stone-200 rounded-lg p-4 shadow-sm"
                     >
                       <div className="flex justify-between items-start mb-2">
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-stone-600">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-stone-600">
                           {ansicht !== "datum" && (
                             <span>📅 {formatDatum(b.datum)}</span>
                           )}
                           {ansicht !== "ort" && <span>📍 {b.ort} ({b.land})</span>}
+                          {ansicht !== "vogelart" && (
+                            <span
+                              className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-xs font-medium"
+                              title="Anzahl Vogelarten"
+                            >
+                              {b.vogelarten.length} {b.vogelarten.length === 1 ? "Art" : "Arten"}
+                            </span>
+                          )}
                         </div>
                         <div className="flex gap-1 shrink-0 ml-2">
                           <button
