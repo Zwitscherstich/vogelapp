@@ -108,7 +108,11 @@ export async function syncOfflineData(): Promise<number> {
         const vorhandeneIds = new Set(
           (schonDa ?? []).map((z) => z.vogelart_id)
         );
-        const fehlende = alleArtIds.filter((id) => !vorhandeneIds.has(id));
+        // Ohne Dedup wuerden zwei Namen, die auf dieselbe Art zeigen
+        // ("Amsel" und "Amsel "), zwei identische Verknuepfungen erzeugen.
+        const fehlende = [...new Set(alleArtIds)].filter(
+          (id) => !vorhandeneIds.has(id)
+        );
 
         if (fehlende.length > 0) {
           const { error: verknuepfFehler } = await supabase
@@ -120,14 +124,27 @@ export async function syncOfflineData(): Promise<number> {
               }))
             );
 
-          // Genau hier lag die stille Datenvernichtung: der Fehler wurde
-          // verworfen, die lokale Kopie trotzdem geloescht und der Eintrag als
-          // erledigt gezaehlt -- die Beobachtung lag ohne Arten auf dem Server.
-          if (
-            verknuepfFehler &&
-            (verknuepfFehler as { code?: string }).code !== "23505"
-          ) {
-            continue;
+          if (verknuepfFehler) {
+            // 23505 heisst NICHT zwangslaeufig "alles schon vorhanden": ein
+            // mehrzeiliger Insert ist atomar, eine einzige Kollision laesst
+            // den ganzen Stapel zurueckrollen. Statt zu raten wird nachgesehen,
+            // was tatsaechlich verknuepft ist -- die lokale Kopie darf erst
+            // weg, wenn wirklich jede Art auf dem Server liegt.
+            const { data: nachher, error: nachpruefFehler } = await supabase
+              .from("beobachtung_vogelarten")
+              .select("vogelart_id")
+              .eq("beobachtung_id", beobachtungId);
+
+            if (nachpruefFehler) continue;
+
+            const jetztVorhanden = new Set(
+              (nachher ?? []).map((z) => z.vogelart_id)
+            );
+            const immerNochFehlend = [...new Set(alleArtIds)].filter(
+              (id) => !jetztVorhanden.has(id)
+            );
+
+            if (immerNochFehlend.length > 0) continue;
           }
         }
       }
