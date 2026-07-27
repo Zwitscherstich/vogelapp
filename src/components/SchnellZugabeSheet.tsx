@@ -27,6 +27,7 @@ export default function SchnellZugabeSheet({
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [laedt, setLaedt] = useState(true);
   const [zielId, setZielId] = useState<number | null>(null);
+  const [zielZurueckgesetzt, setZielZurueckgesetzt] = useState(false);
   const [zielListeOffen, setZielListeOffen] = useState(false);
   const [chipBasis, setChipBasis] = useState<ChipVorschlag[]>([]);
   const [status, setStatus] = useState<Record<number, ArtStatus>>({});
@@ -38,6 +39,12 @@ export default function SchnellZugabeSheet({
 
   // Merkt sich, fuer welches Ziel die Chip-Reihe berechnet wurde.
   const chipsFuerZiel = useRef<number | null>(null);
+
+  // Spiegelt zielId in einen Ref, damit der Lade-Effekt den aktuellen Wert
+  // lesen kann, ohne zielId in seine Abhaengigkeitsliste aufzunehmen (das
+  // wuerde den Effekt bei jeder Zielwahl erneut auslösen).
+  const zielIdRef = useRef<number | null>(null);
+  zielIdRef.current = zielId;
 
   // Snapshot laden: frisch holen wenn online und veraltet, sonst zwischengespeichert
   useEffect(() => {
@@ -52,11 +59,28 @@ export default function SchnellZugabeSheet({
       }
       if (abgebrochen) return;
       setSnapshot(s);
+
       // Ziel nur beim allerersten Laden vorbelegen. Sonst setzt ein Online/
       // Offline-Wechsel eine vom Nutzer gewaehlte Zielbeobachtung wieder auf
       // die neueste zurueck -- und die naechste Zugabe landete stillschweigend
       // an der falschen Beobachtung.
-      setZielId((bisher) => bisher ?? s?.beobachtungen[0]?.id ?? null);
+      //
+      // Ausnahme: der Snapshot haelt nur die letzten ZIEL_LISTE_LAENGE
+      // Beobachtungen. Faellt das gewaehlte Ziel aus diesem Fenster, waere es
+      // nicht mehr auffindbar und das Sheet zeigte faelschlich "Noch keine
+      // Beobachtung vorhanden". Dann auf die neueste zurueckfallen -- und das
+      // dem Nutzer sagen, statt das Ziel stillschweigend zu wechseln.
+      const bisher = zielIdRef.current;
+      const neueste = s?.beobachtungen[0]?.id ?? null;
+      if (bisher === null) {
+        setZielId(neueste);
+      } else {
+        const nochVorhanden = s?.beobachtungen.some((b) => b.id === bisher) ?? false;
+        if (!nochVorhanden) {
+          setZielId(neueste);
+          setZielZurueckgesetzt(true);
+        }
+      }
       setLaedt(false);
     }
     laden();
@@ -218,6 +242,13 @@ export default function SchnellZugabeSheet({
               </p>
             )}
 
+            {zielZurueckgesetzt && (
+              <p className="px-4 py-1.5 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">
+                Die zuvor gewählte Beobachtung steht nicht mehr in der Liste –
+                Ziel wurde auf die neueste zurückgesetzt.
+              </p>
+            )}
+
             {zielListeOffen && (
               <div className="border-b border-stone-200 max-h-52 overflow-y-auto">
                 {snapshot!.beobachtungen.map((b) => (
@@ -226,6 +257,7 @@ export default function SchnellZugabeSheet({
                     onClick={() => {
                       setZielId(b.id);
                       setZielListeOffen(false);
+                      setZielZurueckgesetzt(false);
                     }}
                     className={`block w-full text-left px-4 py-2.5 text-sm border-b border-stone-100 ${
                       b.id === zielId ? "bg-emerald-50 text-emerald-800" : ""
