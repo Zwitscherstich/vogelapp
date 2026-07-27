@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { getCachedVogelarten } from "@/lib/offlineDb";
@@ -35,6 +35,9 @@ export default function SchnellZugabeSheet({
   const [alleArten, setAlleArten] = useState<{ id: number; name: string }[]>([]);
   const [fehler, setFehler] = useState("");
   const [beschaeftigt, setBeschaeftigt] = useState(false);
+
+  // Merkt sich, fuer welches Ziel die Chip-Reihe berechnet wurde.
+  const chipsFuerZiel = useRef<number | null>(null);
 
   // Snapshot laden: frisch holen wenn online und veraltet, sonst zwischengespeichert
   useEffect(() => {
@@ -87,6 +90,14 @@ export default function SchnellZugabeSheet({
   // sonst bricht die Reihe waehrend eines Bursts unter dem Daumen um.
   useEffect(() => {
     if (!snapshot || zielId === null) return;
+
+    // Nur neu berechnen, wenn der Nutzer das Ziel tatsaechlich gewechselt hat.
+    // Ein blosser Wechsel der Snapshot-Referenz (etwa durch einen Online/
+    // Offline-Wechsel, der ladeSnapshot erneut aufruft) darf die Reihe nicht
+    // umbrechen und den Zaehler nicht zuruecksetzen.
+    if (chipsFuerZiel.current === zielId) return;
+    chipsFuerZiel.current = zielId;
+
     setChipBasis(chipsBerechnen(snapshot, zielId));
     setStatus({});
     setAnzahl(0);
