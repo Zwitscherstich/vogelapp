@@ -195,7 +195,7 @@ export default function BeobachtungFormular({
     setOrtIndex(-1);
   }
 
-  function toggleArt(id: number) {
+  function toggleArt(id: number, fokusBehalten = false) {
     const name = vogelarten.find((a) => a.id === id)?.name ?? "";
     setAusgewaehlteArten((prev) =>
       prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id]
@@ -207,7 +207,11 @@ export default function BeobachtungFormular({
     }
     setSuchbegriff("");
     setArtenIndex(-1);
-    setTimeout(() => suchfeldRef.current?.focus(), 0);
+    // Nur zurueck ins Suchfeld, wenn der Nutzer gerade sucht. Sonst reisst
+    // jedes Entfernen einer Art die Bildschirmtastatur auf.
+    if (fokusBehalten) {
+      setTimeout(() => suchfeldRef.current?.focus(), 0);
+    }
   }
 
   function handleOrtKeyDown(e: React.KeyboardEvent) {
@@ -251,9 +255,9 @@ export default function BeobachtungFormular({
     } else if (e.key === "Enter") {
       e.preventDefault();
       if (artenIndex >= 0 && artenIndex < sichtbareArten.length) {
-        toggleArt(sichtbareArten[artenIndex].id);
+        toggleArt(sichtbareArten[artenIndex].id, true);
       } else if (sichtbareArten.length > 0) {
-        toggleArt(sichtbareArten[0].id);
+        toggleArt(sichtbareArten[0].id, true);
       } else if (gefilterteArten.length === 0 && suchbegriff.trim()) {
         handleNeueArt();
       }
@@ -273,7 +277,7 @@ export default function BeobachtungFormular({
         setVogelarten((prev) =>
           [...prev, data].sort((a, b) => a.name.localeCompare(b.name))
         );
-        toggleArt(data.id);
+        toggleArt(data.id, true);
       }
     } else {
       setNeueArtenNamen((prev) => [...prev, name]);
@@ -398,7 +402,7 @@ export default function BeobachtungFormular({
               <button
                 key={art.id}
                 data-art-item
-                onClick={() => toggleArt(art.id)}
+                onClick={() => toggleArt(art.id, suchbegriff.trim().length > 0)}
                 className={`block w-full text-left px-3 py-1.5 text-sm transition-colors ${
                   istAusgewaehlt
                     ? `${selectedBg} font-medium`
@@ -440,7 +444,7 @@ export default function BeobachtungFormular({
                   onClick={() => {
                     const id = vogelarten.find((a) => a.name === name)?.id;
                     if (id !== undefined) {
-                      toggleArt(id);
+                      toggleArt(id, false);
                     } else {
                       setAusgewaehlteArtenNamen((prev) => prev.filter((n) => n !== name));
                     }

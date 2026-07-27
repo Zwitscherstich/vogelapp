@@ -43,6 +43,7 @@ export default function SchnellZugabeSheet({
   // Erlaubt es, das Sheet ueber den Griff bewusst zu vergroessern, statt dass
   // die Pille nur so aussieht als liesse sie sich ziehen.
   const [vergroessert, setVergroessert] = useState(false);
+  const suchfeldRef = useRef<HTMLInputElement>(null);
 
   // Merkt sich, fuer welches Ziel die Chip-Reihe berechnet wurde.
   const chipsFuerZiel = useRef<number | null>(null);
@@ -205,7 +206,10 @@ export default function SchnellZugabeSheet({
     (a) => a.name.toLowerCase() === suche.trim().toLowerCase()
   );
 
-  async function hinzufuegen(art: { id: number } | { neuerName: string }) {
+  async function hinzufuegen(
+    art: { id: number } | { neuerName: string },
+    fokusBehalten = false
+  ) {
     if (zielId === null) return;
     const artId = "id" in art ? art.id : null;
 
@@ -216,6 +220,11 @@ export default function SchnellZugabeSheet({
     }
     setAnzahl((n) => n + 1);
     setSuche("");
+    // Beim Suchen den Fokus behalten, damit die Tastatur offen bleibt und der
+    // naechste Name direkt getippt werden kann.
+    if (fokusBehalten) {
+      setTimeout(() => suchfeldRef.current?.focus(), 0);
+    }
     setFehler("");
 
     const ergebnis = await artHinzufuegen(zielId, art, online);
@@ -483,6 +492,7 @@ export default function SchnellZugabeSheet({
                   autoCorrect="off"
                   autoCapitalize="off"
                   spellCheck={false}
+                  ref={suchfeldRef}
                   value={suche}
                   onChange={(e) => setSuche(e.target.value)}
                   placeholder="Suchen…"
@@ -503,7 +513,7 @@ export default function SchnellZugabeSheet({
                         key={a.id}
                         disabled={drin}
                         onClick={() =>
-                          gesetzt ? rueckgaengig(a.id) : hinzufuegen({ id: a.id })
+                          gesetzt ? rueckgaengig(a.id) : hinzufuegen({ id: a.id }, true)
                         }
                         title={gesetzt ? "Tippen zum Rückgängigmachen" : undefined}
                         className={`block w-full text-left px-3 py-3 text-sm border-b border-stone-100 ${
@@ -525,7 +535,7 @@ export default function SchnellZugabeSheet({
                       disabled={neueArtLaeuft}
                       onClick={async () => {
                         setNeueArtLaeuft(true);
-                        await hinzufuegen({ neuerName: suche.trim() });
+                        await hinzufuegen({ neuerName: suche.trim() }, true);
                         setNeueArtLaeuft(false);
                       }}
                       className="block w-full text-left px-3 py-3 text-sm text-emerald-700 font-medium"

@@ -13,6 +13,28 @@ export default function SchnellZugabeFab() {
   const online = useOnlineStatus();
   const [offen, setOffen] = useState(false);
 
+  // Zurueck-Taste schliesst das Sheet, statt die Seite zu verlassen.
+  useEffect(() => {
+    if (!offen) return;
+
+    window.history.pushState({ schnellzugabeOffen: true }, "");
+
+    function beiZurueck() {
+      setOffen(false);
+    }
+    window.addEventListener("popstate", beiZurueck);
+
+    return () => {
+      window.removeEventListener("popstate", beiZurueck);
+      // Wurde anders geschlossen (Fertig/Hintergrund), liegt unser Eintrag
+      // noch im Verlauf und muss entfernt werden -- sonst braeuchte es zwei
+      // Zurueck-Tipps, um die Seite zu verlassen.
+      if (window.history.state?.schnellzugabeOffen) {
+        window.history.back();
+      }
+    };
+  }, [offen]);
+
   // Beim Einhaengen einmal vorwaermen, damit auch ohne Besuch der
   // Beobachtungs-Seite ein Snapshot existiert. Nur nachladen, wenn der Stand
   // wirklich veraltet ist -- sonst loeste jeder Verbindungswechsel eine

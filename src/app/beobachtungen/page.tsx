@@ -34,6 +34,17 @@ export default function BeobachtungenPage() {
   const [loeschenId, setLoeschenId] = useState<number | null>(null);
   const [exportiert, setExportiert] = useState<number | null>(null);
 
+  // Nach dem Schliessen des Bearbeiten-Formulars steht der Scroll sonst auf
+  // einer anderen Beobachtung -- und direkt daneben liegt der Loeschen-Knopf.
+  function zurueckScrollen(id: number) {
+    // Erst nach dem Neu-Rendern scrollen, sonst existiert die Zeile noch nicht.
+    setTimeout(() => {
+      document
+        .getElementById(`beob-${id}`)
+        ?.scrollIntoView({ block: "center", behavior: "auto" });
+    }, 50);
+  }
+
   const ladeBeobachtungen = useCallback(async () => {
     // Alle drei Abfragen parallel statt N+1 Einzelabfragen.
     // Seitenweise laden: PostgREST schneidet sonst still bei 1000 Zeilen ab,
@@ -273,14 +284,20 @@ export default function BeobachtungenPage() {
                       vorhandeneArten={b.vogelarten}
                       kommentar={b.kommentar ?? ""}
                       onGespeichert={() => {
+                        const id = b.id;
                         setBearbeitenId(null);
-                        ladeBeobachtungen();
+                        void ladeBeobachtungen().then(() => zurueckScrollen(id));
                       }}
-                      onAbbrechen={() => setBearbeitenId(null)}
+                      onAbbrechen={() => {
+                        const id = b.id;
+                        setBearbeitenId(null);
+                        zurueckScrollen(id);
+                      }}
                     />
                   ) : (
                     <div
                       key={`${b.id}-${schluessel}`}
+                      id={`beob-${b.id}`}
                       className="bg-white border border-stone-200 rounded-lg p-4 shadow-sm"
                     >
                       <div className="flex justify-between items-start mb-2">
