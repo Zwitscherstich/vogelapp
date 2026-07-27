@@ -1287,7 +1287,11 @@ Create `src/components/SchnellZugabeFab.tsx`:
 
 import { useState, useEffect } from "react";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
-import { snapshotAktualisieren } from "@/lib/schnellzugabeSnapshot";
+import {
+  snapshotAktualisieren,
+  snapshotHolen,
+  SNAPSHOT_MAX_ALTER_MS,
+} from "@/lib/schnellzugabeSnapshot";
 import SchnellZugabeSheet from "./SchnellZugabeSheet";
 
 export default function SchnellZugabeFab() {
@@ -1295,9 +1299,28 @@ export default function SchnellZugabeFab() {
   const [offen, setOffen] = useState(false);
 
   // Beim Einhaengen einmal vorwaermen, damit auch ohne Besuch der
-  // Beobachtungs-Seite ein Snapshot existiert.
+  // Beobachtungs-Seite ein Snapshot existiert. Nur nachladen, wenn der Stand
+  // wirklich veraltet ist -- sonst loeste jeder Verbindungswechsel eine
+  // vollstaendige paginierte Abfrage aus, und zwar auf jeder Seite, weil der
+  // FAB im Root-Layout haengt.
   useEffect(() => {
-    if (online) void snapshotAktualisieren();
+    if (!online) return;
+    let abgebrochen = false;
+
+    async function vorwaermen() {
+      const vorhanden = await snapshotHolen();
+      if (abgebrochen) return;
+      const veraltet =
+        !vorhanden ||
+        Date.now() - new Date(vorhanden.erstelltAm).getTime() >
+          SNAPSHOT_MAX_ALTER_MS;
+      if (veraltet) void snapshotAktualisieren();
+    }
+
+    void vorwaermen();
+    return () => {
+      abgebrochen = true;
+    };
   }, [online]);
 
   return (
@@ -1305,7 +1328,7 @@ export default function SchnellZugabeFab() {
       <button
         onClick={() => setOffen(true)}
         aria-label="Vogelart schnell hinzufügen"
-        className="sm:hidden fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-emerald-600 text-white text-2xl shadow-lg active:bg-emerald-700 flex items-center justify-center pb-[env(safe-area-inset-bottom)]"
+        className="sm:hidden fixed bottom-[calc(1.25rem+env(safe-area-inset-bottom))] right-5 z-40 w-14 h-14 rounded-full bg-emerald-600 text-white text-2xl shadow-lg active:bg-emerald-700 flex items-center justify-center"
       >
         🐦
       </button>
