@@ -295,10 +295,13 @@ export default function SchnellZugabeSheet({
   // damit sie nicht unnoetig viel leere Flaeche zeigen.
   const geladen = !laedt && !dbFehler && !!ziel;
 
+  // Bei offener Tastatur ist die volle Hoehe bereits erzwungen -- der Schalter
+  // haette dann keine sichtbare Wirkung und wuerde nur unbemerkt umschalten.
+  const istAusgeklappt = tastaturOffen || vergroessert;
+
   // Bei offener Tastatur bleibt sonst rund ein Drittel des sichtbaren Bereichs
   // ungenutzt, und es passt nur eine Trefferzeile ins Bild.
-  const panelHoehe =
-    tastaturOffen || vergroessert ? "h-full" : "h-[70vh] max-h-full";
+  const panelHoehe = istAusgeklappt ? "h-full" : "h-[70vh] max-h-full";
 
   return (
     <div
@@ -325,13 +328,14 @@ export default function SchnellZugabeSheet({
             <button
               type="button"
               onClick={() => setVergroessert((v) => !v)}
-              aria-expanded={vergroessert}
-              aria-label={vergroessert ? "Sheet verkleinern" : "Sheet vergrößern"}
-              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50"
+              disabled={tastaturOffen}
+              aria-expanded={istAusgeklappt}
+              aria-label={istAusgeklappt ? "Sheet verkleinern" : "Sheet vergrößern"}
+              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50 disabled:active:bg-transparent"
             >
               <span className="block w-10 h-1 rounded-full bg-stone-300" />
               <span className="text-[10px] leading-none text-stone-400 mt-1">
-                {vergroessert ? "▾" : "▴"}
+                {istAusgeklappt ? "▾" : "▴"}
               </span>
             </button>
             <p className="px-4 py-6 text-sm text-stone-500">Lade…</p>
@@ -341,13 +345,14 @@ export default function SchnellZugabeSheet({
             <button
               type="button"
               onClick={() => setVergroessert((v) => !v)}
-              aria-expanded={vergroessert}
-              aria-label={vergroessert ? "Sheet verkleinern" : "Sheet vergrößern"}
-              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50"
+              disabled={tastaturOffen}
+              aria-expanded={istAusgeklappt}
+              aria-label={istAusgeklappt ? "Sheet verkleinern" : "Sheet vergrößern"}
+              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50 disabled:active:bg-transparent"
             >
               <span className="block w-10 h-1 rounded-full bg-stone-300" />
               <span className="text-[10px] leading-none text-stone-400 mt-1">
-                {vergroessert ? "▾" : "▴"}
+                {istAusgeklappt ? "▾" : "▴"}
               </span>
             </button>
             <div className="px-4 py-6 space-y-3">
@@ -367,13 +372,14 @@ export default function SchnellZugabeSheet({
             <button
               type="button"
               onClick={() => setVergroessert((v) => !v)}
-              aria-expanded={vergroessert}
-              aria-label={vergroessert ? "Sheet verkleinern" : "Sheet vergrößern"}
-              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50"
+              disabled={tastaturOffen}
+              aria-expanded={istAusgeklappt}
+              aria-label={istAusgeklappt ? "Sheet verkleinern" : "Sheet vergrößern"}
+              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50 disabled:active:bg-transparent"
             >
               <span className="block w-10 h-1 rounded-full bg-stone-300" />
               <span className="text-[10px] leading-none text-stone-400 mt-1">
-                {vergroessert ? "▾" : "▴"}
+                {istAusgeklappt ? "▾" : "▴"}
               </span>
             </button>
             <div className="px-4 py-6 space-y-3">
@@ -393,9 +399,19 @@ export default function SchnellZugabeSheet({
           <>
             {/* Band 1: Kopf- und Steuerbereich – feste Groesse, scrollt nicht mit */}
             <div className="shrink-0">
-              <div className="flex justify-center pt-2 pb-1">
+              <button
+                type="button"
+                onClick={() => setVergroessert((v) => !v)}
+                disabled={tastaturOffen}
+                aria-expanded={istAusgeklappt}
+                aria-label={istAusgeklappt ? "Sheet verkleinern" : "Sheet vergrößern"}
+                className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50 disabled:active:bg-transparent"
+              >
                 <span className="block w-10 h-1 rounded-full bg-stone-300" />
-              </div>
+                <span className="text-[10px] leading-none text-stone-400 mt-1">
+                  {istAusgeklappt ? "▾" : "▴"}
+                </span>
+              </button>
 
               {/* Zielleiste */}
               <button
