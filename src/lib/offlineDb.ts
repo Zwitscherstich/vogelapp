@@ -1,7 +1,9 @@
 // Lokale IndexedDB für Offline-Betrieb
 
+import type { Snapshot } from "./schnellzugabeChips";
+
 const DB_NAME = "vogeltagebuch";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -20,6 +22,16 @@ function openDb(): Promise<IDBDatabase> {
       }
       if (!db.objectStoreNames.contains("offlineVogelarten")) {
         db.createObjectStore("offlineVogelarten", {
+          keyPath: "tempId",
+          autoIncrement: true,
+        });
+      }
+      // v2: Schnellzugabe – Snapshot und Warteschlange fuer Nachtraege
+      if (!db.objectStoreNames.contains("schnellzugabeSnapshot")) {
+        db.createObjectStore("schnellzugabeSnapshot", { keyPath: "id" });
+      }
+      if (!db.objectStoreNames.contains("offlineArtNachtraege")) {
+        db.createObjectStore("offlineArtNachtraege", {
           keyPath: "tempId",
           autoIncrement: true,
         });
@@ -142,9 +154,54 @@ export async function deleteOfflineVogelart(tempId: number): Promise<void> {
   );
 }
 
+// --- Schnellzugabe: Snapshot ---
+
+export async function speicherSnapshot(snapshot: Snapshot): Promise<void> {
+  await doTransaction("schnellzugabeSnapshot", "readwrite", (store) =>
+    store.put(snapshot)
+  );
+}
+
+export async function ladeSnapshot(): Promise<Snapshot | null> {
+  const treffer = await doTransaction<Snapshot | undefined>(
+    "schnellzugabeSnapshot",
+    "readonly",
+    (store) => store.get("aktuell")
+  );
+  return treffer ?? null;
+}
+
+// --- Schnellzugabe: Warteschlange ---
+
+export interface ArtNachtrag {
+  tempId?: number;
+  beobachtungId: number;
+  /** Bestehende Art. Genau eines von vogelartId / neuerName ist gesetzt. */
+  vogelartId?: number;
+  /** Neue Art, die beim Sync erst angelegt werden muss. */
+  neuerName?: string;
+}
+
+export async function saveArtNachtrag(nachtrag: ArtNachtrag): Promise<void> {
+  await doTransaction("offlineArtNachtraege", "readwrite", (store) =>
+    store.add(nachtrag)
+  );
+}
+
+export async function getArtNachtraege(): Promise<ArtNachtrag[]> {
+  return getAllFromStore("offlineArtNachtraege");
+}
+
+export async function deleteArtNachtrag(tempId: number): Promise<void> {
+  await doTransaction("offlineArtNachtraege", "readwrite", (store) =>
+    store.delete(tempId)
+  );
+}
+
 // --- Pending count ---
 export async function getPendingCount(): Promise<number> {
   const beob = await getOfflineBeobachtungen();
   const arten = await getOfflineVogelarten();
-  return beob.length + arten.length;
+  const nachtraege = await getArtNachtraege();
+  return beob.length + arten.length + nachtraege.length;
 }
