@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import {
   BarChart,
   Bar,
@@ -50,14 +50,20 @@ export default function DashboardPage() {
 
   useEffect(() => {
     async function ladeDaten() {
-      const [beobResult, artenResult] = await Promise.all([
+      // Verknüpfungen seitenweise laden – sonst schneidet PostgREST bei 1000
+      // Zeilen still ab und alle Statistiken zählen zu niedrig.
+      const [beobResult, artenRows] = await Promise.all([
         supabase
           .from("beobachtungen")
           .select("id, datum, ort, land")
           .order("datum", { ascending: true }),
-        supabase
-          .from("beobachtung_vogelarten")
-          .select("beobachtung_id, vogelart_id, vogelarten(name)"),
+        ladeAlleZeilen<ArtVerknuepfung>((von, bis) =>
+          supabase
+            .from("beobachtung_vogelarten")
+            .select("beobachtung_id, vogelart_id, vogelarten(name)")
+            .order("id")
+            .range(von, bis)
+        ),
       ]);
 
       const beob = beobResult.data as RawBeobachtung[] | null;
@@ -67,7 +73,7 @@ export default function DashboardPage() {
       }
 
       const artenMap = new Map<number, string[]>();
-      for (const a of (artenResult.data as unknown as ArtVerknuepfung[]) ?? []) {
+      for (const a of artenRows) {
         const name = (a.vogelarten as unknown as { name: string })?.name ?? "";
         if (!name) continue;
         const liste = artenMap.get(a.beobachtung_id) ?? [];

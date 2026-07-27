@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import BeobachtungBearbeiten from "@/components/BeobachtungBearbeiten";
 import ExcelImport from "@/components/ExcelImport";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
@@ -30,18 +30,30 @@ export default function BeobachtungenPage() {
   const [exportiert, setExportiert] = useState<number | null>(null);
 
   const ladeBeobachtungen = useCallback(async () => {
-    // Alle drei Abfragen parallel statt N+1 Einzelabfragen
-    const [beobResult, artenResult, fotosResult] = await Promise.all([
+    // Alle drei Abfragen parallel statt N+1 Einzelabfragen.
+    // Seitenweise laden: PostgREST schneidet sonst still bei 1000 Zeilen ab,
+    // was zu unvollständigen Artenlisten und damit zu Datenverlust beim
+    // Bearbeiten führt.
+    const [beobResult, artenRows, fotoRows] = await Promise.all([
       supabase
         .from("beobachtungen")
         .select("id, datum, ort, land, kommentar")
         .order("datum", { ascending: false }),
-      supabase
-        .from("beobachtung_vogelarten")
-        .select("beobachtung_id, vogelarten(name)"),
-      supabase
-        .from("fotos")
-        .select("beobachtung_id, url"),
+      ladeAlleZeilen<{ beobachtung_id: number; vogelarten: { name: string } }>(
+        (von, bis) =>
+          supabase
+            .from("beobachtung_vogelarten")
+            .select("beobachtung_id, vogelarten(name)")
+            .order("id")
+            .range(von, bis)
+      ),
+      ladeAlleZeilen<{ beobachtung_id: number; url: string }>((von, bis) =>
+        supabase
+          .from("fotos")
+          .select("beobachtung_id, url")
+          .order("id")
+          .range(von, bis)
+      ),
     ]);
 
     const beob = beobResult.data;
@@ -52,7 +64,7 @@ export default function BeobachtungenPage() {
 
     // Vogelarten nach Beobachtung gruppieren
     const artenMap = new Map<number, string[]>();
-    for (const a of artenResult.data ?? []) {
+    for (const a of artenRows) {
       const name = (a.vogelarten as unknown as { name: string })?.name ?? "";
       const liste = artenMap.get(a.beobachtung_id) ?? [];
       liste.push(name);
@@ -61,7 +73,7 @@ export default function BeobachtungenPage() {
 
     // Fotos nach Beobachtung gruppieren
     const fotosMap = new Map<number, string[]>();
-    for (const f of fotosResult.data ?? []) {
+    for (const f of fotoRows) {
       const liste = fotosMap.get(f.beobachtung_id) ?? [];
       liste.push(f.url);
       fotosMap.set(f.beobachtung_id, liste);

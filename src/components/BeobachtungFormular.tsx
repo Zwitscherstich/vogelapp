@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 
 interface BekannterOrt {
   ort: string;
@@ -88,12 +88,18 @@ export default function BeobachtungFormular({
       let data: { id: number; name: string }[] | null = null;
 
       if (online) {
-        const result = await supabase
-          .from("vogelarten")
-          .select("id, name")
-          .order("name");
-        if (result.data) {
-          data = result.data;
+        // Seitenweise laden: ab 1000 Arten würden sonst Namen nicht mehr auf
+        // IDs auflösbar sein – und damit beim Speichern verloren gehen.
+        const geladen = await ladeAlleZeilen<{ id: number; name: string }>(
+          (von, bis) =>
+            supabase
+              .from("vogelarten")
+              .select("id, name")
+              .order("name")
+              .range(von, bis)
+        );
+        if (geladen.length > 0) {
+          data = geladen;
           try {
             localStorage.setItem("vogeltagebuch-vogelarten-cache", JSON.stringify(data));
           } catch {}

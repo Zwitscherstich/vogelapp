@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import {
   cacheVogelarten,
@@ -26,11 +26,18 @@ export default function VogelartenPage() {
 
   async function ladeVogelarten() {
     if (online) {
-      const [artenResult, beobResult] = await Promise.all([
+      // Verknüpfungen seitenweise laden – sonst schneidet PostgREST bei 1000
+      // Zeilen still ab und Arten wirken fälschlich als "noch nie beobachtet".
+      const [artenResult, verknuepfungen] = await Promise.all([
         supabase.from("vogelarten").select("id, name").order("name"),
-        supabase
-          .from("beobachtung_vogelarten")
-          .select("vogelart_id, beobachtungen(land)"),
+        ladeAlleZeilen<{ vogelart_id: number; beobachtungen: { land: string } }>(
+          (von, bis) =>
+            supabase
+              .from("beobachtung_vogelarten")
+              .select("vogelart_id, beobachtungen(land)")
+              .order("id")
+              .range(von, bis)
+        ),
       ]);
 
       if (artenResult.data) {
@@ -40,7 +47,7 @@ export default function VogelartenPage() {
 
       // Ländercodes pro Vogelart sammeln
       const laenderMap = new Map<number, string[]>();
-      for (const entry of beobResult.data ?? []) {
+      for (const entry of verknuepfungen) {
         const land =
           (entry.beobachtungen as unknown as { land: string })?.land ?? "";
         if (!land) continue;

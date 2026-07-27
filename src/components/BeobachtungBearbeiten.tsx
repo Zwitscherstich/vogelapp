@@ -38,6 +38,13 @@ export default function BeobachtungBearbeiten({
   const [fehler, setFehler] = useState("");
   const fotoInputRef = useRef<HTMLInputElement>(null);
 
+  // Maßgeblicher Ausgangsstand der verknüpften Arten – direkt für DIESE
+  // Beobachtung geladen. Die per Prop übergebene Liste stammt aus einer
+  // Sammelabfrage über alle Beobachtungen und kann unvollständig sein;
+  // darauf darf beim Speichern nicht vertraut werden.
+  const [basisArtIds, setBasisArtIds] = useState<number[] | null>(null);
+  const [basisArtNamen, setBasisArtNamen] = useState<string[]>([]);
+
   const datenRef = useRef<BeobachtungDaten>({
     datum: startDatum,
     ort: startOrt,
@@ -59,6 +66,38 @@ export default function BeobachtungBearbeiten({
     ladeFotos();
   }, [beobachtungId]);
 
+  // Verknüpfte Arten dieser einen Beobachtung laden (nach beobachtung_id
+  // gefiltert, daher nie vom 1000-Zeilen-Limit betroffen).
+  useEffect(() => {
+    let abgebrochen = false;
+    async function ladeArten() {
+      const { data, error } = await supabase
+        .from("beobachtung_vogelarten")
+        .select("vogelart_id, vogelarten(name)")
+        .eq("beobachtung_id", beobachtungId);
+
+      if (abgebrochen) return;
+
+      if (error || !data) {
+        setFehler(
+          "Vorhandene Vogelarten konnten nicht geladen werden. Bitte neu laden – Speichern ist bis dahin gesperrt."
+        );
+        return;
+      }
+
+      setBasisArtIds(data.map((z) => z.vogelart_id));
+      setBasisArtNamen(
+        data
+          .map((z) => (z.vogelarten as unknown as { name: string })?.name ?? "")
+          .filter(Boolean)
+      );
+    }
+    ladeArten();
+    return () => {
+      abgebrochen = true;
+    };
+  }, [beobachtungId]);
+
   function handleChange(daten: BeobachtungDaten) {
     datenRef.current = daten;
   }
@@ -69,6 +108,13 @@ export default function BeobachtungBearbeiten({
 
     if (!datum || !ort || (ausgewaehlteArten.length === 0 && neueArtenNamen.length === 0)) {
       setFehler("Bitte Datum, Ort und mindestens eine Vogelart angeben.");
+      return;
+    }
+
+    // Ohne maßgeblichen Ausgangsstand darf nicht gespeichert werden – sonst
+    // könnten vorhandene Arten unbemerkt entfernt werden.
+    if (basisArtIds === null) {
+      setFehler("Vorhandene Vogelarten noch nicht geladen. Bitte kurz warten.");
       return;
     }
 
@@ -97,25 +143,37 @@ export default function BeobachtungBearbeiten({
         }
       }
 
-      // Alte Vogelarten-Verknüpfungen löschen
-      const { error: deleteError } = await supabase
-        .from("beobachtung_vogelarten")
-        .delete()
-        .eq("beobachtung_id", beobachtungId);
+      // Nur die tatsächliche Differenz schreiben statt alles zu löschen und
+      // neu anzulegen. Dadurch kann das Hinzufügen einer Art bestehende
+      // Verknüpfungen nicht mehr entfernen.
+      const sollIds = new Set(alleArtIds);
+      const istIds = new Set(basisArtIds);
 
-      if (deleteError) throw deleteError;
+      const zuLoeschen = [...istIds].filter((id) => !sollIds.has(id));
+      const zuErgaenzen = [...sollIds].filter((id) => !istIds.has(id));
 
-      // Neue Vogelarten-Verknüpfungen einfügen
-      const artEintraege = alleArtIds.map((vogelart_id) => ({
-        beobachtung_id: beobachtungId,
-        vogelart_id,
-      }));
+      if (zuLoeschen.length > 0) {
+        const { error: deleteError } = await supabase
+          .from("beobachtung_vogelarten")
+          .delete()
+          .eq("beobachtung_id", beobachtungId)
+          .in("vogelart_id", zuLoeschen);
 
-      const { error: insertError } = await supabase
-        .from("beobachtung_vogelarten")
-        .insert(artEintraege);
+        if (deleteError) throw deleteError;
+      }
 
-      if (insertError) throw insertError;
+      if (zuErgaenzen.length > 0) {
+        const { error: insertError } = await supabase
+          .from("beobachtung_vogelarten")
+          .insert(
+            zuErgaenzen.map((vogelart_id) => ({
+              beobachtung_id: beobachtungId,
+              vogelart_id,
+            }))
+          );
+
+        if (insertError) throw insertError;
+      }
 
       // Neue Fotos hochladen
       for (const foto of neueFotos) {
@@ -153,16 +211,23 @@ export default function BeobachtungBearbeiten({
         </div>
       )}
 
-      <BeobachtungFormular
-        initialDatum={startDatum}
-        initialOrt={startOrt}
-        initialLand={startLand}
-        initialArten={vorhandeneArten}
-        initialKommentar={startKommentar}
-        online={true}
-        onChange={handleChange}
-        farbschema="amber"
-      />
+      {basisArtIds === null ? (
+        <p className="text-sm text-stone-500">
+          Lade vorhandene Vogelarten
+          {vorhandeneArten.length > 0 && ` (${vorhandeneArten.join(", ")})`}...
+        </p>
+      ) : (
+        <BeobachtungFormular
+          initialDatum={startDatum}
+          initialOrt={startOrt}
+          initialLand={startLand}
+          initialArten={basisArtNamen}
+          initialKommentar={startKommentar}
+          online={true}
+          onChange={handleChange}
+          farbschema="amber"
+        />
+      )}
 
       {/* Fotos */}
       <div>
@@ -239,7 +304,7 @@ export default function BeobachtungBearbeiten({
       <div className="flex gap-2">
         <button
           onClick={handleSpeichern}
-          disabled={speichern}
+          disabled={speichern || basisArtIds === null}
           className="bg-amber-600 text-white px-4 py-2 rounded text-sm hover:bg-amber-700 disabled:opacity-50 transition-colors"
         >
           {speichern ? "Speichert..." : "Änderungen speichern"}

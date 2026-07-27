@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { supabase } from "@/lib/supabase";
+import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import * as XLSX from "xlsx";
 
 interface Props {
@@ -278,14 +278,14 @@ export default function ExcelImport({ onImportiert }: Props) {
     // Cache für Vogelarten-IDs, um wiederholte Abfragen zu vermeiden
     const vogelartCache = new Map<string, number>();
 
-    // Vorhandene Vogelarten laden
-    const { data: vorhandeneArten } = await supabase
-      .from("vogelarten")
-      .select("id, name");
-    if (vorhandeneArten) {
-      for (const art of vorhandeneArten) {
-        vogelartCache.set(art.name.toLowerCase(), art.id);
-      }
+    // Vorhandene Vogelarten laden – seitenweise, sonst würden ab 1000 Arten
+    // vorhandene Arten nicht gefunden und beim Import doppelt angelegt.
+    const vorhandeneArten = await ladeAlleZeilen<{ id: number; name: string }>(
+      (von, bis) =>
+        supabase.from("vogelarten").select("id, name").order("id").range(von, bis)
+    );
+    for (const art of vorhandeneArten) {
+      vogelartCache.set(art.name.toLowerCase(), art.id);
     }
 
     for (let i = 0; i < gueltigeZeilen.length; i++) {
