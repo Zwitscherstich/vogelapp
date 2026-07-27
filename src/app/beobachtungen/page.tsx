@@ -96,12 +96,16 @@ export default function BeobachtungenPage() {
     // Beilaeufig auffrischen, aber nur wenn der Stand wirklich veraltet ist --
     // die Seite hat dieselbe Tabelle gerade erst geladen.
     void (async () => {
-      const vorhanden = await snapshotHolen();
-      const veraltet =
-        !vorhanden ||
-        Date.now() - new Date(vorhanden.erstelltAm).getTime() >
-          SNAPSHOT_MAX_ALTER_MS;
-      if (veraltet) await snapshotAktualisieren();
+      try {
+        const vorhanden = await snapshotHolen();
+        const veraltet =
+          !vorhanden ||
+          Date.now() - new Date(vorhanden.erstelltAm).getTime() >
+            SNAPSHOT_MAX_ALTER_MS;
+        if (veraltet) await snapshotAktualisieren();
+      } catch {
+        // Snapshot ist nur Beiwerk
+      }
     })();
   }, []);
 

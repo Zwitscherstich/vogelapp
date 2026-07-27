@@ -5,9 +5,38 @@ import type { Snapshot } from "./schnellzugabeChips";
 const DB_NAME = "vogeltagebuch";
 const DB_VERSION = 2;
 
+/**
+ * Genau eine Verbindung pro Seite, von allen Aufrufern geteilt.
+ *
+ * Frueher oeffnete jeder Aufruf eine eigene Verbindung und schloss sie nie.
+ * Solange DB_VERSION nie stieg, fiel das nicht auf. Beim ersten
+ * Versionswechsel blockierten sich diese Verbindungen jedoch gegenseitig:
+ * ein Upgrade wartet, bis alle offenen Verbindungen geschlossen sind -- und
+ * das geschah nie. Die Oberflaeche blieb dann dauerhaft im Ladezustand.
+ */
+let dbVerbindung: Promise<IDBDatabase> | null = null;
+
+/** Wird geworfen, wenn ein anderer Kontext den Versionswechsel blockiert. */
+export const DB_BLOCKIERT =
+  "Die lokale Datenbank ist blockiert. Bitte alle weiteren Tabs und die " +
+  "installierte App schliessen und die Seite neu laden.";
+
 function openDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
+  if (dbVerbindung) return dbVerbindung;
+
+  dbVerbindung = new Promise<IDBDatabase>((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
+    let erledigt = false;
+
+    // Ohne Zeitgrenze wartet die Oberflaeche unbegrenzt, wenn ein anderer
+    // Kontext den Versionswechsel blockiert -- genau der Fehler, der die
+    // Schnellzugabe dauerhaft im Ladezustand haengen liess.
+    const zeitgeber = setTimeout(() => {
+      if (erledigt) return;
+      erledigt = true;
+      dbVerbindung = null;
+      reject(new Error(DB_BLOCKIERT));
+    }, 5000);
 
     request.onupgradeneeded = () => {
       const db = request.result;
@@ -40,20 +69,45 @@ function openDb(): Promise<IDBDatabase> {
 
     request.onsuccess = () => {
       const db = request.result;
-      // Aeltere Kontexte muessen ihre Verbindung schliessen, damit ein
-      // Versionswechsel nicht dauerhaft blockiert.
-      db.onversionchange = () => db.close();
+
+      // Fordert ein anderer Kontext eine neue Version an, geben wir die
+      // Verbindung frei, statt den Upgrade zu blockieren.
+      db.onversionchange = () => {
+        db.close();
+        dbVerbindung = null;
+      };
+      db.onclose = () => {
+        dbVerbindung = null;
+      };
+
+      if (erledigt) {
+        // Zeitgrenze war schon abgelaufen: Verbindung nicht verwaisen lassen.
+        db.close();
+        return;
+      }
+      erledigt = true;
+      clearTimeout(zeitgeber);
       resolve(db);
     };
-    request.onerror = () => reject(request.error);
-    request.onblocked = () =>
-      reject(
-        new Error(
-          "Datenbank-Aktualisierung blockiert. Bitte andere offene Tabs oder " +
-            "die installierte App schliessen und die Seite neu laden."
-        )
-      );
+
+    request.onerror = () => {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(zeitgeber);
+      dbVerbindung = null;
+      reject(request.error);
+    };
+
+    request.onblocked = () => {
+      if (erledigt) return;
+      erledigt = true;
+      clearTimeout(zeitgeber);
+      dbVerbindung = null;
+      reject(new Error(DB_BLOCKIERT));
+    };
   });
+
+  return dbVerbindung;
 }
 
 function doTransaction<T>(

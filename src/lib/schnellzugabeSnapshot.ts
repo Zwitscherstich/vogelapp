@@ -85,11 +85,8 @@ export async function snapshotAktualisieren(): Promise<Snapshot | null> {
   }
 }
 
-/** Liest den zwischengespeicherten Stand, ohne zu laden. */
+/** Liest den zwischengespeicherten Stand, ohne zu laden. Wirft, wenn die
+ *  lokale Datenbank nicht verfuegbar ist -- der Aufrufer entscheidet. */
 export async function snapshotHolen(): Promise<Snapshot | null> {
-  try {
-    return await ladeSnapshot();
-  } catch {
-    return null;
-  }
+  return ladeSnapshot();
 }

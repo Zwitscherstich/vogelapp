@@ -36,6 +36,7 @@ export default function SchnellZugabeSheet({
   const [alleArten, setAlleArten] = useState<{ id: number; name: string }[]>([]);
   const [fehler, setFehler] = useState("");
   const [beschaeftigt, setBeschaeftigt] = useState(false);
+  const [dbFehler, setDbFehler] = useState("");
 
   // Merkt sich, fuer welches Ziel die Chip-Reihe berechnet wurde.
   const chipsFuerZiel = useRef<number | null>(null);
@@ -50,7 +51,15 @@ export default function SchnellZugabeSheet({
   useEffect(() => {
     let abgebrochen = false;
     async function laden() {
-      let s = await snapshotHolen();
+      let s: Snapshot | null = null;
+      try {
+        s = await snapshotHolen();
+      } catch (e: unknown) {
+        if (abgebrochen) return;
+        setDbFehler(e instanceof Error ? e.message : "Lokale Datenbank nicht verfuegbar.");
+        setLaedt(false);
+        return;
+      }
       const veraltet =
         !s || Date.now() - new Date(s.erstelltAm).getTime() > SNAPSHOT_MAX_ALTER_MS;
       if (online && veraltet) {
@@ -204,6 +213,18 @@ export default function SchnellZugabeSheet({
 
         {laedt ? (
           <p className="px-4 py-6 text-sm text-stone-500">Lade…</p>
+        ) : dbFehler ? (
+          <div className="px-4 py-6 space-y-3">
+            <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+              {dbFehler}
+            </p>
+            <button
+              onClick={() => location.reload()}
+              className="bg-emerald-600 text-white px-4 py-2 rounded text-sm"
+            >
+              Neu laden
+            </button>
+          </div>
         ) : !ziel ? (
           <div className="px-4 py-6 space-y-3">
             <p className="text-sm text-stone-600">

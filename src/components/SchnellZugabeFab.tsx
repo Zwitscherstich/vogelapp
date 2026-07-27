@@ -22,13 +22,17 @@ export default function SchnellZugabeFab() {
     let abgebrochen = false;
 
     async function vorwaermen() {
-      const vorhanden = await snapshotHolen();
-      if (abgebrochen) return;
-      const veraltet =
-        !vorhanden ||
-        Date.now() - new Date(vorhanden.erstelltAm).getTime() >
-          SNAPSHOT_MAX_ALTER_MS;
-      if (veraltet) void snapshotAktualisieren();
+      try {
+        const vorhanden = await snapshotHolen();
+        if (abgebrochen) return;
+        const veraltet =
+          !vorhanden ||
+          Date.now() - new Date(vorhanden.erstelltAm).getTime() >
+            SNAPSHOT_MAX_ALTER_MS;
+        if (veraltet) void snapshotAktualisieren();
+      } catch {
+        // Lokale Datenbank nicht verfuegbar: das Sheet meldet es beim Oeffnen.
+      }
     }
 
     void vorwaermen();
