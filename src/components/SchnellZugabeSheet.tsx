@@ -40,6 +40,9 @@ export default function SchnellZugabeSheet({
   // nachverfolgen liesse.
   const [neueArtLaeuft, setNeueArtLaeuft] = useState(false);
   const [dbFehler, setDbFehler] = useState("");
+  // Erlaubt es, das Sheet ueber den Griff bewusst zu vergroessern, statt dass
+  // die Pille nur so aussieht als liesse sie sich ziehen.
+  const [vergroessert, setVergroessert] = useState(false);
 
   // Merkt sich, fuer welches Ziel die Chip-Reihe berechnet wurde.
   const chipsFuerZiel = useRef<number | null>(null);
@@ -54,11 +57,18 @@ export default function SchnellZugabeSheet({
   // Ohne diese Nachfuehrung liegt das Sheet hinter der Tastatur.
   const [sichtfeld, setSichtfeld] = useState<{ hoehe: number; oben: number } | null>(null);
 
+  // Groesste je gesehene Hoehe = Zustand ohne Tastatur. Ein Vergleich mit
+  // window.innerHeight taugt nicht, weil interactive-widget=resizes-content
+  // auch das Layout-Viewport verkleinert.
+  const maxSichtHoehe = useRef(0);
+
   useEffect(() => {
     const vv = window.visualViewport;
     if (!vv) return;
-    const aktualisiere = () =>
+    const aktualisiere = () => {
+      maxSichtHoehe.current = Math.max(maxSichtHoehe.current, vv.height);
       setSichtfeld({ hoehe: vv.height, oben: vv.offsetTop });
+    };
     aktualisiere();
     vv.addEventListener("resize", aktualisiere);
     vv.addEventListener("scroll", aktualisiere);
@@ -67,6 +77,11 @@ export default function SchnellZugabeSheet({
       vv.removeEventListener("scroll", aktualisiere);
     };
   }, []);
+
+  const tastaturOffen =
+    !!sichtfeld &&
+    maxSichtHoehe.current > 0 &&
+    sichtfeld.hoehe < maxSichtHoehe.current * 0.85;
 
   // Snapshot laden: frisch holen wenn online und veraltet, sonst zwischengespeichert
   useEffect(() => {
@@ -280,6 +295,11 @@ export default function SchnellZugabeSheet({
   // damit sie nicht unnoetig viel leere Flaeche zeigen.
   const geladen = !laedt && !dbFehler && !!ziel;
 
+  // Bei offener Tastatur bleibt sonst rund ein Drittel des sichtbaren Bereichs
+  // ungenutzt, und es passt nur eine Trefferzeile ins Bild.
+  const panelHoehe =
+    tastaturOffen || vergroessert ? "h-full" : "h-[70vh] max-h-full";
+
   return (
     <div
       className="fixed inset-x-0 top-0 z-50 flex flex-col justify-end"
@@ -297,21 +317,39 @@ export default function SchnellZugabeSheet({
 
       <div
         className={`relative bg-white rounded-t-2xl shadow-xl pb-[env(safe-area-inset-bottom)] ${
-          geladen ? "h-[70vh] max-h-full flex flex-col" : "max-h-[min(85vh,100%)] overflow-y-auto"
+          geladen ? `${panelHoehe} flex flex-col` : "max-h-[min(85vh,100%)] overflow-y-auto"
         }`}
       >
         {laedt ? (
           <>
-            <div className="flex justify-center pt-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setVergroessert((v) => !v)}
+              aria-expanded={vergroessert}
+              aria-label={vergroessert ? "Sheet verkleinern" : "Sheet vergrößern"}
+              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50"
+            >
               <span className="block w-10 h-1 rounded-full bg-stone-300" />
-            </div>
+              <span className="text-[10px] leading-none text-stone-400 mt-1">
+                {vergroessert ? "▾" : "▴"}
+              </span>
+            </button>
             <p className="px-4 py-6 text-sm text-stone-500">Lade…</p>
           </>
         ) : dbFehler ? (
           <>
-            <div className="flex justify-center pt-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setVergroessert((v) => !v)}
+              aria-expanded={vergroessert}
+              aria-label={vergroessert ? "Sheet verkleinern" : "Sheet vergrößern"}
+              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50"
+            >
               <span className="block w-10 h-1 rounded-full bg-stone-300" />
-            </div>
+              <span className="text-[10px] leading-none text-stone-400 mt-1">
+                {vergroessert ? "▾" : "▴"}
+              </span>
+            </button>
             <div className="px-4 py-6 space-y-3">
               <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
                 {dbFehler}
@@ -326,9 +364,18 @@ export default function SchnellZugabeSheet({
           </>
         ) : !ziel ? (
           <>
-            <div className="flex justify-center pt-2 pb-1">
+            <button
+              type="button"
+              onClick={() => setVergroessert((v) => !v)}
+              aria-expanded={vergroessert}
+              aria-label={vergroessert ? "Sheet verkleinern" : "Sheet vergrößern"}
+              className="w-full flex flex-col items-center pt-2 pb-1 active:bg-stone-50"
+            >
               <span className="block w-10 h-1 rounded-full bg-stone-300" />
-            </div>
+              <span className="text-[10px] leading-none text-stone-400 mt-1">
+                {vergroessert ? "▾" : "▴"}
+              </span>
+            </button>
             <div className="px-4 py-6 space-y-3">
               <p className="text-sm text-stone-600">
                 Noch keine Beobachtung vorhanden
@@ -412,7 +459,14 @@ export default function SchnellZugabeSheet({
               {/* Suche – bewusst ohne Autofokus, damit die Tastatur die Chips nicht verdeckt */}
               <div className="px-4 pt-3">
                 <input
-                  type="text"
+                  type="search"
+                  inputMode="search"
+                  enterKeyHint="search"
+                  name="vogelart-suche"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="off"
+                  spellCheck={false}
                   value={suche}
                   onChange={(e) => setSuche(e.target.value)}
                   placeholder="Suchen…"
