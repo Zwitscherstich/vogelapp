@@ -292,6 +292,24 @@ export async function deleteArtNachtrag(tempId: number): Promise<void> {
   );
 }
 
+/**
+ * Entfernt einen noch nicht synchronisierten Nachtrag wieder aus der
+ * Warteschlange. Gibt zurueck, ob etwas entfernt wurde.
+ */
+export async function artNachtragEntfernen(
+  beobachtungId: number,
+  vogelartId: number
+): Promise<boolean> {
+  const alle = await getArtNachtraege();
+  const treffer = alle.filter(
+    (n) => n.beobachtungId === beobachtungId && n.vogelartId === vogelartId
+  );
+  for (const n of treffer) {
+    if (n.tempId !== undefined) await deleteArtNachtrag(n.tempId);
+  }
+  return treffer.length > 0;
+}
+
 // --- Pending count ---
 export async function getPendingCount(): Promise<number> {
   const beob = await getOfflineBeobachtungen();

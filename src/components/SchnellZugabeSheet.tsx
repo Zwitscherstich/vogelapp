@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
 import { getCachedVogelarten } from "@/lib/offlineDb";
-import { artHinzufuegen } from "@/lib/schnellzugabe";
+import { artHinzufuegen, artEntfernen } from "@/lib/schnellzugabe";
 import {
   snapshotAktualisieren,
   snapshotHolen,
@@ -49,6 +49,24 @@ export default function SchnellZugabeSheet({
   // wuerde den Effekt bei jeder Zielwahl erneut auslösen).
   const zielIdRef = useRef<number | null>(null);
   zielIdRef.current = zielId;
+
+  // Die Tastatur verkleinert nur das visuelle, nicht das Layout-Viewport.
+  // Ohne diese Nachfuehrung liegt das Sheet hinter der Tastatur.
+  const [sichtfeld, setSichtfeld] = useState<{ hoehe: number; oben: number } | null>(null);
+
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const aktualisiere = () =>
+      setSichtfeld({ hoehe: vv.height, oben: vv.offsetTop });
+    aktualisiere();
+    vv.addEventListener("resize", aktualisiere);
+    vv.addEventListener("scroll", aktualisiere);
+    return () => {
+      vv.removeEventListener("resize", aktualisiere);
+      vv.removeEventListener("scroll", aktualisiere);
+    };
+  }, []);
 
   // Snapshot laden: frisch holen wenn online und veraltet, sonst zwischengespeichert
   useEffect(() => {
@@ -210,6 +228,31 @@ export default function SchnellZugabeSheet({
     }
   }
 
+  async function rueckgaengig(artId: number) {
+    if (zielId === null) return;
+    const vorher = status[artId];
+    // Nur zuruecknehmen, was diese Sitzung hinzugefuegt hat.
+    if (vorher !== "hinzugefuegt" && vorher !== "wartet") return;
+
+    // Sofort quittieren, wie beim Hinzufuegen.
+    setStatus((s) => {
+      const kopie = { ...s };
+      delete kopie[artId];
+      return kopie;
+    });
+    setAnzahl((n) => Math.max(0, n - 1));
+    setFehler("");
+
+    const ergebnis = await artEntfernen(zielId, artId, online);
+
+    if (ergebnis.status === "fehler") {
+      // Zuruecknehmen des Zuruecknehmens: die Art ist noch da.
+      setStatus((s) => ({ ...s, [artId]: vorher }));
+      setAnzahl((n) => n + 1);
+      setFehler(ergebnis.meldung);
+    }
+  }
+
   function schliessen() {
     if (anzahl > 0) {
       // Der Snapshot ist bis zu einer Minute alt und kennt die gerade
@@ -238,7 +281,14 @@ export default function SchnellZugabeSheet({
   const geladen = !laedt && !dbFehler && !!ziel;
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col justify-end">
+    <div
+      className="fixed inset-x-0 top-0 z-50 flex flex-col justify-end"
+      style={
+        sichtfeld
+          ? { height: `${sichtfeld.hoehe}px`, transform: `translateY(${sichtfeld.oben}px)` }
+          : { height: "100dvh" }
+      }
+    >
       <button
         aria-label="Schließen"
         onClick={schliessen}
@@ -247,7 +297,7 @@ export default function SchnellZugabeSheet({
 
       <div
         className={`relative bg-white rounded-t-2xl shadow-xl pb-[env(safe-area-inset-bottom)] ${
-          geladen ? "h-[70vh] flex flex-col" : "max-h-[85vh] overflow-y-auto"
+          geladen ? "h-[70vh] max-h-full flex flex-col" : "max-h-[min(85vh,100%)] overflow-y-auto"
         }`}
       >
         {laedt ? (
@@ -381,15 +431,22 @@ export default function SchnellZugabeSheet({
                     return (
                       <button
                         key={a.id}
-                        disabled={drin || gesetzt}
-                        onClick={() => hinzufuegen({ id: a.id })}
+                        disabled={drin}
+                        onClick={() =>
+                          gesetzt ? rueckgaengig(a.id) : hinzufuegen({ id: a.id })
+                        }
+                        title={gesetzt ? "Tippen zum Rückgängigmachen" : undefined}
                         className={`block w-full text-left px-3 py-3 text-sm border-b border-stone-100 ${
-                          drin || gesetzt ? "text-stone-400" : "hover:bg-stone-50"
+                          drin ? "text-stone-400" : gesetzt ? "text-emerald-700" : "hover:bg-stone-50"
                         }`}
                       >
                         {a.name}
                         {drin && <span className="ml-2 text-xs">✓ schon erfasst</span>}
-                        {gesetzt && <span className="ml-2 text-xs">✓ hinzugefügt</span>}
+                        {gesetzt && (
+                          <span className="ml-2 text-xs">
+                            {status[a.id] === "wartet" ? "🕓 " : "✓ "}hinzugefügt ↩
+                          </span>
+                        )}
                       </button>
                     );
                   })}
@@ -415,11 +472,14 @@ export default function SchnellZugabeSheet({
                     return (
                       <button
                         key={c.id}
-                        disabled={erledigt || s === "vorhanden"}
-                        onClick={() => hinzufuegen({ id: c.id })}
+                        disabled={s === "vorhanden"}
+                        onClick={() =>
+                          erledigt ? rueckgaengig(c.id) : hinzufuegen({ id: c.id })
+                        }
+                        title={erledigt ? "Tippen zum Rückgängigmachen" : undefined}
                         className={`px-3 py-3 rounded-full text-sm border transition-colors ${
                           erledigt
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
                             : s === "vorhanden"
                               ? "bg-stone-50 text-stone-400 border-stone-200"
                               : "bg-white text-stone-800 border-stone-300 active:bg-stone-100"
@@ -428,6 +488,7 @@ export default function SchnellZugabeSheet({
                         {erledigt ? "✓ " : ""}
                         {s === "wartet" ? "🕓 " : ""}
                         {c.name}
+                        {erledigt ? " ↩" : ""}
                         {s === "vorhanden" ? " (schon erfasst)" : ""}
                       </button>
                     );

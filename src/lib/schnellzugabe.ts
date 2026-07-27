@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { saveArtNachtrag } from "./offlineDb";
+import { saveArtNachtrag, artNachtragEntfernen } from "./offlineDb";
 import type { ZugabeErgebnis } from "./schnellzugabeChips";
 
 /** Postgres: unique_violation. */
@@ -106,4 +106,51 @@ async function artAnlegen(name: string): Promise<number | null> {
 
 function fehlertext(e: unknown): string {
   return e instanceof Error ? e.message : "Unbekannter Fehler";
+}
+
+export type EntfernenErgebnis =
+  | { status: "entfernt" }
+  | { status: "fehler"; meldung: string };
+
+/**
+ * Nimmt eine gerade hinzugefuegte Art wieder zurueck.
+ *
+ * Bewusst eng gefasst: es wird genau eine Verknuepfung geloescht, adressiert
+ * ueber BEIDE Schluessel. Diese Funktion ist die einzige Stelle im Feature,
+ * die ueberhaupt loescht -- der Datenverlust vom 2026-07-27 entstand durch
+ * ein "alles loeschen und neu schreiben". Das darf hier nie entstehen.
+ */
+export async function artEntfernen(
+  beobachtungId: number,
+  vogelartId: number,
+  online: boolean
+): Promise<EntfernenErgebnis> {
+  if (!Number.isInteger(beobachtungId) || !Number.isInteger(vogelartId)) {
+    return { status: "fehler", meldung: "Ungueltige Angaben zum Entfernen." };
+  }
+
+  try {
+    if (!online) {
+      await artNachtragEntfernen(beobachtungId, vogelartId);
+      return { status: "entfernt" };
+    }
+
+    // Offline eingereihte Zugabe kann es auch online noch geben, wenn der
+    // Sync noch nicht gelaufen ist -- zuerst aus der Warteschlange nehmen.
+    await artNachtragEntfernen(beobachtungId, vogelartId);
+
+    const { error } = await supabase
+      .from("beobachtung_vogelarten")
+      .delete()
+      .eq("beobachtung_id", beobachtungId)
+      .eq("vogelart_id", vogelartId);
+
+    if (error) return { status: "fehler", meldung: error.message };
+    return { status: "entfernt" };
+  } catch (e: unknown) {
+    return {
+      status: "fehler",
+      meldung: e instanceof Error ? e.message : "Unbekannter Fehler",
+    };
+  }
 }
