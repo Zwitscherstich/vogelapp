@@ -61,4 +61,25 @@ const leer: Snapshot = {
 };
 assert.deepEqual(chipsBerechnen(leer, 1), []);
 
+// Gleichstand im Fenster: die Gesamthaeufigkeit entscheidet vor dem Alphabet.
+// Beide Arten haben Fensterhaeufigkeit 1; alphabetisch käme "Fitis" zuerst,
+// wegen der hoeheren Gesamthaeufigkeit muss aber "Zilpzalp" vorn stehen.
+const gleichstand: Snapshot = {
+  id: "aktuell",
+  erstelltAm: "2026-07-27T10:00:00.000Z",
+  beobachtungen: [
+    { id: 2, datum: "2026-07-27", ort: "A", land: "D",
+      arten: [{ id: 11, name: "Zilpzalp" }, { id: 12, name: "Fitis" }] },
+    { id: 1, datum: "2026-07-26", ort: "A", land: "D", arten: [] },
+  ],
+  topArten: [
+    { id: 12, name: "Fitis", anzahl: 5 },
+    { id: 11, name: "Zilpzalp", anzahl: 99 },
+  ],
+};
+assert.deepEqual(
+  chipsBerechnen(gleichstand, 1).map((c) => c.name),
+  ["Zilpzalp", "Fitis"]
+);
+
 console.log("schnellzugabeChips: alle Tests bestanden");
