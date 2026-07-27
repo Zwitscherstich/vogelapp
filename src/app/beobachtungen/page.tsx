@@ -113,6 +113,16 @@ export default function BeobachtungenPage() {
     ladeBeobachtungen();
   }, [ladeBeobachtungen]);
 
+  // Der FAB haengt im Root-Layout und kennt diese Seite nicht. Nach einer
+  // Schnellzugabe meldet er sich per Event, damit die Liste aktuell wird.
+  useEffect(() => {
+    function neuLaden() {
+      void ladeBeobachtungen();
+    }
+    window.addEventListener("schnellzugabe:gespeichert", neuLaden);
+    return () => window.removeEventListener("schnellzugabe:gespeichert", neuLaden);
+  }, [ladeBeobachtungen]);
+
   const gefiltert = beobachtungen.filter((b) => {
     const s = suchbegriff.toLowerCase();
     if (!s) return true;

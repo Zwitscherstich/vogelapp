@@ -35,7 +35,10 @@ export default function SchnellZugabeSheet({
   const [suche, setSuche] = useState("");
   const [alleArten, setAlleArten] = useState<{ id: number; name: string }[]>([]);
   const [fehler, setFehler] = useState("");
-  const [beschaeftigt, setBeschaeftigt] = useState(false);
+  // Schuetzt nur den "neue Art anlegen"-Button vor Doppel-Submit -- er hat
+  // keine id, ueber die sich ein status-Eintrag wie bei Chips/Treffern
+  // nachverfolgen liesse.
+  const [neueArtLaeuft, setNeueArtLaeuft] = useState(false);
   const [dbFehler, setDbFehler] = useState("");
 
   // Merkt sich, fuer welches Ziel die Chip-Reihe berechnet wurde.
@@ -170,22 +173,53 @@ export default function SchnellZugabeSheet({
   );
 
   async function hinzufuegen(art: { id: number } | { neuerName: string }) {
-    if (zielId === null || beschaeftigt) return;
-    setBeschaeftigt(true);
+    if (zielId === null) return;
+    const artId = "id" in art ? art.id : null;
+
+    // Sofort quittieren. Der Nutzer steht draussen mit dem Fernglas -- er darf
+    // nicht auf das Netz warten, bevor der Tipp sichtbar wird.
+    if (artId !== null) {
+      setStatus((s) => ({ ...s, [artId]: "hinzugefuegt" }));
+    }
+    setAnzahl((n) => n + 1);
+    setSuche("");
     setFehler("");
 
     const ergebnis = await artHinzufuegen(zielId, art, online);
 
     if (ergebnis.status === "fehler") {
-      setFehler(ergebnis.meldung);
-    } else {
-      if ("id" in art) {
-        setStatus((s) => ({ ...s, [art.id]: ergebnis.status }));
+      // Zuruecknehmen: gespeichert wurde nichts.
+      if (artId !== null) {
+        setStatus((s) => {
+          const kopie = { ...s };
+          delete kopie[artId];
+          return kopie;
+        });
       }
-      if (ergebnis.status !== "vorhanden") setAnzahl((n) => n + 1);
-      setSuche("");
+      setAnzahl((n) => Math.max(0, n - 1));
+      setFehler(ergebnis.meldung);
+      return;
     }
-    setBeschaeftigt(false);
+
+    if (artId !== null) {
+      setStatus((s) => ({ ...s, [artId]: ergebnis.status }));
+    }
+    // "vorhanden" heisst: war schon erfasst, zaehlt nicht als Zugabe.
+    if (ergebnis.status === "vorhanden") {
+      setAnzahl((n) => Math.max(0, n - 1));
+    }
+  }
+
+  function schliessen() {
+    if (anzahl > 0) {
+      // Der Snapshot ist bis zu einer Minute alt und kennt die gerade
+      // hinzugefuegten Arten noch nicht -- sonst tauchten sie beim erneuten
+      // Oeffnen wieder als Vorschlag auf.
+      void snapshotAktualisieren();
+      // Die Liste unter dem Sheet haengt nicht am FAB, sie muss selbst neu laden.
+      window.dispatchEvent(new CustomEvent("schnellzugabe:gespeichert"));
+    }
+    onSchliessen();
   }
 
   function datumKurz(iso: string) {
@@ -198,189 +232,224 @@ export default function SchnellZugabeSheet({
     });
   }
 
+  // Nur der geladene Normalzustand bekommt die feste Hoehe mit eigenem
+  // Scrollbereich -- Lade-, Fehler- und Leerzustand bleiben inhaltsgross,
+  // damit sie nicht unnoetig viel leere Flaeche zeigen.
+  const geladen = !laedt && !dbFehler && !!ziel;
+
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <button
         aria-label="Schließen"
-        onClick={onSchliessen}
+        onClick={schliessen}
         className="absolute inset-0 bg-black/40"
       />
 
-      <div className="relative bg-white rounded-t-2xl shadow-xl max-h-[85vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
-        <div className="flex justify-center pt-2 pb-1">
-          <span className="block w-10 h-1 rounded-full bg-stone-300" />
-        </div>
-
+      <div
+        className={`relative bg-white rounded-t-2xl shadow-xl pb-[env(safe-area-inset-bottom)] ${
+          geladen ? "h-[70vh] flex flex-col" : "max-h-[85vh] overflow-y-auto"
+        }`}
+      >
         {laedt ? (
-          <p className="px-4 py-6 text-sm text-stone-500">Lade…</p>
+          <>
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="block w-10 h-1 rounded-full bg-stone-300" />
+            </div>
+            <p className="px-4 py-6 text-sm text-stone-500">Lade…</p>
+          </>
         ) : dbFehler ? (
-          <div className="px-4 py-6 space-y-3">
-            <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
-              {dbFehler}
-            </p>
-            <button
-              onClick={() => location.reload()}
-              className="bg-emerald-600 text-white px-4 py-2 rounded text-sm"
-            >
-              Neu laden
-            </button>
-          </div>
+          <>
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="block w-10 h-1 rounded-full bg-stone-300" />
+            </div>
+            <div className="px-4 py-6 space-y-3">
+              <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {dbFehler}
+              </p>
+              <button
+                onClick={() => location.reload()}
+                className="bg-emerald-600 text-white px-4 py-2 rounded text-sm"
+              >
+                Neu laden
+              </button>
+            </div>
+          </>
         ) : !ziel ? (
-          <div className="px-4 py-6 space-y-3">
-            <p className="text-sm text-stone-600">
-              Noch keine Beobachtung vorhanden
-              {!online && " – und offline sind keine Daten zwischengespeichert"}.
-            </p>
-            <a
-              href="/"
-              className="inline-block bg-emerald-600 text-white px-4 py-2 rounded text-sm"
-            >
-              Neue Beobachtung anlegen
-            </a>
-          </div>
+          <>
+            <div className="flex justify-center pt-2 pb-1">
+              <span className="block w-10 h-1 rounded-full bg-stone-300" />
+            </div>
+            <div className="px-4 py-6 space-y-3">
+              <p className="text-sm text-stone-600">
+                Noch keine Beobachtung vorhanden
+                {!online && " – und offline sind keine Daten zwischengespeichert"}.
+              </p>
+              <a
+                href="/"
+                className="inline-block bg-emerald-600 text-white px-4 py-2 rounded text-sm"
+              >
+                Neue Beobachtung anlegen
+              </a>
+            </div>
+          </>
         ) : (
           <>
-            {/* Zielleiste */}
-            <button
-              onClick={() => setZielListeOffen((o) => !o)}
-              className="w-full flex items-center gap-2 px-4 py-3 border-b border-stone-200 text-left"
-            >
-              <span className="text-emerald-700">→</span>
-              <span className="font-medium text-sm">
-                {ziel.ort} ({ziel.land})
-              </span>
-              <span className="text-stone-500 text-sm">
-                {datumKurz(ziel.datum)}
-              </span>
-              <span className="ml-auto text-stone-400 text-xs">
-                {zielListeOffen ? "▲" : "▼"} ändern
-              </span>
-            </button>
-
-            {!online && (
-              <p className="px-4 py-1.5 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">
-                Offline – Stand zwischengespeichert, Zugaben werden später synchronisiert.
-              </p>
-            )}
-
-            {zielZurueckgesetzt && (
-              <p className="px-4 py-1.5 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">
-                Die zuvor gewählte Beobachtung steht nicht mehr in der Liste –
-                Ziel wurde auf die neueste zurückgesetzt.
-              </p>
-            )}
-
-            {zielListeOffen && (
-              <div className="border-b border-stone-200 max-h-52 overflow-y-auto">
-                {snapshot!.beobachtungen.map((b) => (
-                  <button
-                    key={b.id}
-                    onClick={() => {
-                      setZielId(b.id);
-                      setZielListeOffen(false);
-                      setZielZurueckgesetzt(false);
-                    }}
-                    className={`block w-full text-left px-4 py-2.5 text-sm border-b border-stone-100 ${
-                      b.id === zielId ? "bg-emerald-50 text-emerald-800" : ""
-                    }`}
-                  >
-                    {b.ort} ({b.land})
-                    <span className="text-stone-400 ml-2 text-xs">
-                      {datumKurz(b.datum)} · {b.arten.length} Arten
-                    </span>
-                  </button>
-                ))}
+            {/* Band 1: Kopf- und Steuerbereich – feste Groesse, scrollt nicht mit */}
+            <div className="shrink-0">
+              <div className="flex justify-center pt-2 pb-1">
+                <span className="block w-10 h-1 rounded-full bg-stone-300" />
               </div>
-            )}
 
-            {fehler && (
-              <p className="mx-4 my-2 text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
-                {fehler}
-              </p>
-            )}
+              {/* Zielleiste */}
+              <button
+                onClick={() => setZielListeOffen((o) => !o)}
+                className="w-full flex items-center gap-2 px-4 py-3 border-b border-stone-200 text-left"
+              >
+                <span className="text-emerald-700">→</span>
+                <span className="font-medium text-sm">
+                  {ziel.ort} ({ziel.land})
+                </span>
+                <span className="text-stone-500 text-sm">
+                  {datumKurz(ziel.datum)}
+                </span>
+                <span className="ml-auto text-stone-400 text-xs">
+                  {zielListeOffen ? "▲" : "▼"} ändern
+                </span>
+              </button>
 
-            {/* Suche – bewusst ohne Autofokus, damit die Tastatur die Chips nicht verdeckt */}
-            <div className="px-4 pt-3">
-              <input
-                type="text"
-                value={suche}
-                onChange={(e) => setSuche(e.target.value)}
-                placeholder="Suchen…"
-                className="border border-stone-300 rounded px-3 py-2 w-full text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
-              />
+              {!online && (
+                <p className="px-4 py-1.5 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">
+                  Offline – Stand zwischengespeichert, Zugaben werden später synchronisiert.
+                </p>
+              )}
+
+              {zielZurueckgesetzt && (
+                <p className="px-4 py-1.5 text-xs text-amber-700 bg-amber-50 border-b border-amber-100">
+                  Die zuvor gewählte Beobachtung steht nicht mehr in der Liste –
+                  Ziel wurde auf die neueste zurückgesetzt.
+                </p>
+              )}
+
+              {zielListeOffen && (
+                <div className="border-b border-stone-200 max-h-52 overflow-y-auto">
+                  {snapshot!.beobachtungen.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => {
+                        setZielId(b.id);
+                        setZielListeOffen(false);
+                        setZielZurueckgesetzt(false);
+                      }}
+                      className={`block w-full text-left px-4 py-2.5 text-sm border-b border-stone-100 ${
+                        b.id === zielId ? "bg-emerald-50 text-emerald-800" : ""
+                      }`}
+                    >
+                      {b.ort} ({b.land})
+                      <span className="text-stone-400 ml-2 text-xs">
+                        {datumKurz(b.datum)} · {b.arten.length} Arten
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {fehler && (
+                <p className="mx-4 my-2 text-sm text-red-800 bg-red-50 border border-red-200 rounded px-3 py-2">
+                  {fehler}
+                </p>
+              )}
+
+              {/* Suche – bewusst ohne Autofokus, damit die Tastatur die Chips nicht verdeckt */}
+              <div className="px-4 pt-3">
+                <input
+                  type="text"
+                  value={suche}
+                  onChange={(e) => setSuche(e.target.value)}
+                  placeholder="Suchen…"
+                  className="border border-stone-300 rounded px-3 py-2 w-full text-base focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
             </div>
 
-            {suche.trim() ? (
-              <div className="px-4 py-2">
-                {treffer.map((a) => {
-                  const drin = vorhandeneIds.has(a.id) || status[a.id] === "vorhanden";
-                  const gesetzt = status[a.id] === "hinzugefuegt" || status[a.id] === "wartet";
-                  return (
+            {/* Band 2: einziger Scrollbereich – Treffer- oder Chipliste */}
+            <div className="flex-1 overflow-y-auto min-h-0">
+              {suche.trim() ? (
+                <div className="px-4 py-2">
+                  {treffer.map((a) => {
+                    const drin = vorhandeneIds.has(a.id) || status[a.id] === "vorhanden";
+                    const gesetzt = status[a.id] === "hinzugefuegt" || status[a.id] === "wartet";
+                    return (
+                      <button
+                        key={a.id}
+                        disabled={drin || gesetzt}
+                        onClick={() => hinzufuegen({ id: a.id })}
+                        className={`block w-full text-left px-3 py-3 text-sm border-b border-stone-100 ${
+                          drin || gesetzt ? "text-stone-400" : "hover:bg-stone-50"
+                        }`}
+                      >
+                        {a.name}
+                        {drin && <span className="ml-2 text-xs">✓ schon erfasst</span>}
+                        {gesetzt && <span className="ml-2 text-xs">✓ hinzugefügt</span>}
+                      </button>
+                    );
+                  })}
+                  {!exakterTreffer && (
                     <button
-                      key={a.id}
-                      disabled={drin || gesetzt || beschaeftigt}
-                      onClick={() => hinzufuegen({ id: a.id })}
-                      className={`block w-full text-left px-3 py-3 text-sm border-b border-stone-100 ${
-                        drin || gesetzt ? "text-stone-400" : "hover:bg-stone-50"
-                      }`}
+                      disabled={neueArtLaeuft}
+                      onClick={async () => {
+                        setNeueArtLaeuft(true);
+                        await hinzufuegen({ neuerName: suche.trim() });
+                        setNeueArtLaeuft(false);
+                      }}
+                      className="block w-full text-left px-3 py-3 text-sm text-emerald-700 font-medium"
                     >
-                      {a.name}
-                      {drin && <span className="ml-2 text-xs">✓ schon erfasst</span>}
-                      {gesetzt && <span className="ml-2 text-xs">✓ hinzugefügt</span>}
+                      + &quot;{suche.trim()}&quot; als neue Vogelart hinzufügen
                     </button>
-                  );
-                })}
-                {!exakterTreffer && (
-                  <button
-                    disabled={beschaeftigt}
-                    onClick={() => hinzufuegen({ neuerName: suche.trim() })}
-                    className="block w-full text-left px-3 py-3 text-sm text-emerald-700 font-medium"
-                  >
-                    + &quot;{suche.trim()}&quot; als neue Vogelart hinzufügen
-                  </button>
-                )}
-              </div>
-            ) : (
-              <div className="px-4 py-3 flex flex-wrap gap-2">
-                {chipBasis.map((c) => {
-                  const s = status[c.id];
-                  const erledigt = s === "hinzugefuegt" || s === "wartet";
-                  return (
-                    <button
-                      key={c.id}
-                      disabled={erledigt || s === "vorhanden" || beschaeftigt}
-                      onClick={() => hinzufuegen({ id: c.id })}
-                      className={`px-3 py-3 rounded-full text-sm border transition-colors ${
-                        erledigt
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60"
-                          : s === "vorhanden"
-                            ? "bg-stone-50 text-stone-400 border-stone-200"
-                            : "bg-white text-stone-800 border-stone-300 active:bg-stone-100"
-                      }`}
-                    >
-                      {erledigt ? "✓ " : ""}
-                      {s === "wartet" ? "🕓 " : ""}
-                      {c.name}
-                      {s === "vorhanden" ? " (schon erfasst)" : ""}
-                    </button>
-                  );
-                })}
-                {chipBasis.length === 0 && (
-                  <p className="text-sm text-stone-500">
-                    Keine Vorschläge – über die Suche hinzufügen.
-                  </p>
-                )}
-              </div>
-            )}
+                  )}
+                </div>
+              ) : (
+                <div className="px-4 py-3 flex flex-wrap gap-2">
+                  {chipBasis.map((c) => {
+                    const s = status[c.id];
+                    const erledigt = s === "hinzugefuegt" || s === "wartet";
+                    return (
+                      <button
+                        key={c.id}
+                        disabled={erledigt || s === "vorhanden"}
+                        onClick={() => hinzufuegen({ id: c.id })}
+                        className={`px-3 py-3 rounded-full text-sm border transition-colors ${
+                          erledigt
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60"
+                            : s === "vorhanden"
+                              ? "bg-stone-50 text-stone-400 border-stone-200"
+                              : "bg-white text-stone-800 border-stone-300 active:bg-stone-100"
+                        }`}
+                      >
+                        {erledigt ? "✓ " : ""}
+                        {s === "wartet" ? "🕓 " : ""}
+                        {c.name}
+                        {s === "vorhanden" ? " (schon erfasst)" : ""}
+                      </button>
+                    );
+                  })}
+                  {chipBasis.length === 0 && (
+                    <p className="text-sm text-stone-500">
+                      Keine Vorschläge – über die Suche hinzufügen.
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
 
-            <div className="flex items-center gap-3 px-4 py-3 border-t border-stone-200 sticky bottom-0 bg-white">
+            {/* Band 3: Fusszeile – feste Groesse */}
+            <div className="shrink-0 border-t border-stone-200 flex items-center gap-3 px-4 py-3 bg-white">
               <span className="text-sm text-stone-600">
                 {anzahl === 0
                   ? "Noch nichts hinzugefügt"
                   : `${anzahl} hinzugefügt`}
               </span>
               <button
-                onClick={onSchliessen}
+                onClick={schliessen}
                 className="ml-auto bg-emerald-600 text-white px-5 py-2 rounded text-sm"
               >
                 Fertig
