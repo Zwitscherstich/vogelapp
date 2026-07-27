@@ -85,11 +85,15 @@ export async function syncOfflineData(): Promise<number> {
 
       if (vogelartId === null && n.neuerName) {
         const name = n.neuerName.trim();
-        const { data: vorhandeneArt } = await supabase
+        const { data: vorhandeneArt, error: artFehler } = await supabase
           .from("vogelarten")
           .select("id")
           .eq("name", name)
           .limit(1);
+
+        // Bei fehlgeschlagener Pruefung nichts anlegen: sonst entstuende ein
+        // Duplikat in den Stammdaten. Der Eintrag bleibt in der Warteschlange.
+        if (artFehler) continue;
 
         if (vorhandeneArt && vorhandeneArt.length > 0) {
           vogelartId = vorhandeneArt[0].id;
@@ -111,23 +115,33 @@ export async function syncOfflineData(): Promise<number> {
       }
 
       // Existiert die Zielbeobachtung ueberhaupt noch?
-      const { data: zielBeob } = await supabase
+      const { data: zielBeob, error: zielFehler } = await supabase
         .from("beobachtungen")
         .select("id")
         .eq("id", n.beobachtungId)
         .limit(1);
+
+      // Nur bei einer erfolgreichen Abfrage darf "nicht gefunden" als
+      // "geloescht" gewertet werden. Ein Lesefehler bedeutet nur, dass wir es
+      // gerade nicht wissen -- der Eintrag bleibt fuer den naechsten Versuch
+      // in der Warteschlange.
+      if (zielFehler) continue;
 
       if (!zielBeob || zielBeob.length === 0) {
         await deleteArtNachtrag(n.tempId!);
         continue;
       }
 
-      const { data: schonDa } = await supabase
+      const { data: schonDa, error: schonDaFehler } = await supabase
         .from("beobachtung_vogelarten")
         .select("id")
         .eq("beobachtung_id", n.beobachtungId)
         .eq("vogelart_id", vogelartId)
         .limit(1);
+
+      // Ohne verlaessliche Pruefung nicht einfuegen: ohne Unique-Constraint
+      // entstuende sonst eine doppelte Verknuepfung.
+      if (schonDaFehler) continue;
 
       if (!schonDa || schonDa.length === 0) {
         const { error } = await supabase
