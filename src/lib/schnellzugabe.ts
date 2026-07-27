@@ -20,10 +20,14 @@ export async function artHinzufuegen(
 ): Promise<ZugabeErgebnis> {
   if (!online) {
     try {
+      const neuerName = "neuerName" in art ? art.neuerName.trim() : undefined;
+      if ("neuerName" in art && !neuerName) {
+        return { status: "fehler", meldung: "Bitte einen Artnamen angeben." };
+      }
       await saveArtNachtrag({
         beobachtungId,
         vogelartId: "id" in art ? art.id : undefined,
-        neuerName: "neuerName" in art ? art.neuerName : undefined,
+        neuerName,
       });
       return { status: "wartet" };
     } catch (e: unknown) {

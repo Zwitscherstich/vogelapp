@@ -85,6 +85,12 @@ export async function syncOfflineData(): Promise<number> {
 
       if (vogelartId === null && n.neuerName) {
         const name = n.neuerName.trim();
+        // Leerer Name nach dem Trimmen: der Eintrag ist unbrauchbar und wuerde
+        // sonst eine namenlose Art in den Stammdaten anlegen.
+        if (!name) {
+          await deleteArtNachtrag(n.tempId!);
+          continue;
+        }
         const { data: vorhandeneArt, error: artFehler } = await supabase
           .from("vogelarten")
           .select("id")

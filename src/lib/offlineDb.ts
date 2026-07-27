@@ -38,8 +38,21 @@ function openDb(): Promise<IDBDatabase> {
       }
     };
 
-    request.onsuccess = () => resolve(request.result);
+    request.onsuccess = () => {
+      const db = request.result;
+      // Aeltere Kontexte muessen ihre Verbindung schliessen, damit ein
+      // Versionswechsel nicht dauerhaft blockiert.
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
     request.onerror = () => reject(request.error);
+    request.onblocked = () =>
+      reject(
+        new Error(
+          "Datenbank-Aktualisierung blockiert. Bitte andere offene Tabs oder " +
+            "die installierte App schliessen und die Seite neu laden."
+        )
+      );
   });
 }
 

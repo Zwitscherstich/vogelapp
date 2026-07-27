@@ -52,7 +52,11 @@ export default function SchnellZugabeSheet({
       }
       if (abgebrochen) return;
       setSnapshot(s);
-      setZielId(s?.beobachtungen[0]?.id ?? null);
+      // Ziel nur beim allerersten Laden vorbelegen. Sonst setzt ein Online/
+      // Offline-Wechsel eine vom Nutzer gewaehlte Zielbeobachtung wieder auf
+      // die neueste zurueck -- und die naechste Zugabe landete stillschweigend
+      // an der falschen Beobachtung.
+      setZielId((bisher) => bisher ?? s?.beobachtungen[0]?.id ?? null);
       setLaedt(false);
     }
     laden();
@@ -66,19 +70,29 @@ export default function SchnellZugabeSheet({
     let abgebrochen = false;
     async function laden() {
       if (online) {
-        const arten = await ladeAlleZeilen<{ id: number; name: string }>(
-          (von, bis) =>
-            supabase
-              .from("vogelarten")
-              .select("id, name")
-              .order("name")
-              .range(von, bis)
-        );
-        if (!abgebrochen && arten.length > 0) setAlleArten(arten);
-      } else {
-        const arten = await getCachedVogelarten();
-        if (!abgebrochen) setAlleArten(arten);
+        try {
+          const arten = await ladeAlleZeilen<{ id: number; name: string }>(
+            (von, bis) =>
+              supabase
+                .from("vogelarten")
+                .select("id, name")
+                .order("name")
+                .order("id")
+                .range(von, bis)
+          );
+          if (abgebrochen) return;
+          if (arten.length > 0) {
+            setAlleArten(arten);
+            return;
+          }
+        } catch {
+          // Netz gemeldet, Abfrage trotzdem fehlgeschlagen: auf den lokalen
+          // Bestand zurueckfallen, statt die Suche leer zu lassen.
+        }
       }
+
+      const gecacht = await getCachedVogelarten();
+      if (!abgebrochen) setAlleArten(gecacht);
     }
     laden();
     return () => {
@@ -142,7 +156,8 @@ export default function SchnellZugabeSheet({
   }
 
   function datumKurz(iso: string) {
-    const heute = new Date().toISOString().split("T")[0];
+    const jetzt = new Date();
+    const heute = `${jetzt.getFullYear()}-${String(jetzt.getMonth() + 1).padStart(2, "0")}-${String(jetzt.getDate()).padStart(2, "0")}`;
     if (iso === heute) return "heute";
     return new Date(iso + "T00:00:00").toLocaleDateString("de-DE", {
       day: "numeric",
@@ -153,7 +168,7 @@ export default function SchnellZugabeSheet({
   return (
     <div className="fixed inset-0 z-50 flex flex-col justify-end">
       <button
-        aria-label="Schliessen"
+        aria-label="Schließen"
         onClick={onSchliessen}
         className="absolute inset-0 bg-black/40"
       />
@@ -252,7 +267,7 @@ export default function SchnellZugabeSheet({
                       key={a.id}
                       disabled={drin || gesetzt || beschaeftigt}
                       onClick={() => hinzufuegen({ id: a.id })}
-                      className={`block w-full text-left px-3 py-2.5 text-sm border-b border-stone-100 ${
+                      className={`block w-full text-left px-3 py-3 text-sm border-b border-stone-100 ${
                         drin || gesetzt ? "text-stone-400" : "hover:bg-stone-50"
                       }`}
                     >
@@ -266,9 +281,9 @@ export default function SchnellZugabeSheet({
                   <button
                     disabled={beschaeftigt}
                     onClick={() => hinzufuegen({ neuerName: suche.trim() })}
-                    className="block w-full text-left px-3 py-2.5 text-sm text-emerald-700 font-medium"
+                    className="block w-full text-left px-3 py-3 text-sm text-emerald-700 font-medium"
                   >
-                    + „{suche.trim()}&quot; als neue Vogelart hinzufügen
+                    + &quot;{suche.trim()}&quot; als neue Vogelart hinzufügen
                   </button>
                 )}
               </div>
@@ -282,7 +297,7 @@ export default function SchnellZugabeSheet({
                       key={c.id}
                       disabled={erledigt || s === "vorhanden" || beschaeftigt}
                       onClick={() => hinzufuegen({ id: c.id })}
-                      className={`px-3 py-2.5 rounded-full text-sm border transition-colors ${
+                      className={`px-3 py-3 rounded-full text-sm border transition-colors ${
                         erledigt
                           ? "bg-emerald-50 text-emerald-700 border-emerald-200 opacity-60"
                           : s === "vorhanden"
