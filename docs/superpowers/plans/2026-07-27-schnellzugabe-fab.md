@@ -521,32 +521,90 @@ export async function snapshotHolen(): Promise<Snapshot | null> {
 
 `beobachtungen` is ordered by `id` descending and limited to 10, so `beobachtungen[0]` is always the newest observation — the default target.
 
-- [ ] **Step 2: Verify against the live database**
+- [ ] **Step 2: Verify the query shape against the live database**
 
-```bash
-npm run dev
-```
+The module itself needs a browser (IndexedDB), but the Supabase half can be
+checked headlessly. This confirms the two queries return what the grouping
+code expects — the part most likely to be wrong.
 
-In the browser console on any page:
+Create `scripts/check-snapshot-queries.mjs`:
 
 ```js
-const m = await import("/_next/static/chunks/src_lib_schnellzugabeSnapshot_ts.js").catch(() => null);
+// Prueft die beiden Abfragen aus snapshotAktualisieren gegen die echte
+// Datenbank: neueste 10 Beobachtungen absteigend, alle Verknuepfungen
+// vollstaendig (nicht bei 1000 abgeschnitten).
+import { readFileSync } from "node:fs";
+
+const env = readFileSync(new URL("../.env.local", import.meta.url), "utf8");
+const wert = (s) =>
+  env.split("\n").find((z) => z.startsWith(s))?.split("=")[1]?.trim();
+
+const url = wert("NEXT_PUBLIC_SUPABASE_URL");
+const key = wert("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+const kopf = { apikey: key, Authorization: `Bearer ${key}` };
+
+const beob = await (
+  await fetch(
+    `${url}/rest/v1/beobachtungen?select=id,datum,ort,land&order=id.desc&limit=10`,
+    { headers: kopf }
+  )
+).json();
+
+console.log(`Beobachtungen geladen: ${beob.length} (erwartet: 10)`);
+console.log(`Neueste id: ${beob[0]?.id} – Ziel-Vorgabe des FAB`);
+if (beob.length < 2 || beob[0].id < beob[1].id) {
+  console.error("FEHLER: nicht absteigend nach id sortiert");
+  process.exit(1);
+}
+
+let alle = [];
+for (let von = 0; ; von += 500) {
+  const teil = await (
+    await fetch(
+      `${url}/rest/v1/beobachtung_vogelarten?select=beobachtung_id,vogelart_id,vogelarten(name)&order=id&offset=${von}&limit=500`,
+      { headers: kopf }
+    )
+  ).json();
+  if (!Array.isArray(teil) || teil.length === 0) break;
+  alle = alle.concat(teil);
+}
+
+console.log(`Verknuepfungen geladen: ${alle.length}`);
+if (alle.length <= 1000) {
+  console.error(
+    `WARNUNG: nur ${alle.length} Zeilen – bei genau 1000 waere das die stille Kappung`
+  );
+}
+
+const ohneNamen = alle.filter((z) => !z.vogelarten?.name).length;
+console.log(`Zeilen ohne Artnamen: ${ohneNamen}`);
+
+const proBeob = new Map();
+for (const z of alle) {
+  proBeob.set(z.beobachtung_id, (proBeob.get(z.beobachtung_id) ?? 0) + 1);
+}
+console.log(`Beobachtungen mit Arten: ${proBeob.size}`);
+console.log(`Neueste Beobachtung hat ${proBeob.get(beob[0].id) ?? 0} Arten`);
 ```
 
-If that chunk path doesn't resolve, verify through the UI instead in Task 7. For now confirm the query shape directly:
+Run it:
 
 ```bash
-node -e "console.log('placeholder')"
+node scripts/check-snapshot-queries.mjs
 ```
 
-Simpler and sufficient: temporarily add `snapshotAktualisieren()` to the Beobachtungen page in Task 5 and inspect the IndexedDB record. Skip deeper verification here — Step 3 is the real gate.
+Expected: 10 observations, descending ids, more than 1000 links (1055 as of
+2026-07-27), zero rows without a species name. A count of exactly 1000 means
+the pagination broke and is a blocker.
+
+Commit this script together with the module in Step 3.
 
 - [ ] **Step 3: Typecheck and commit**
 
 ```bash
 npx tsc --noEmit
 npx next build
-git add src/lib/schnellzugabeSnapshot.ts
+git add src/lib/schnellzugabeSnapshot.ts scripts/check-snapshot-queries.mjs
 git commit -m "Schnellzugabe: Snapshot aus Supabase aufbauen und zwischenspeichern"
 ```
 
@@ -795,34 +853,25 @@ In `ladeBeobachtungen`, replace `setLaden(false);` at the end of the function (t
     void snapshotAktualisieren();
 ```
 
-- [ ] **Step 4: Verify a full offline round trip**
+- [ ] **Step 4: Verify the drain logic reads correctly**
 
-```bash
-npm run dev
-```
+The queue lives in IndexedDB, so a genuine round trip needs a browser and is
+covered by Task 8 Step 4. What must be confirmed here, by reading the code:
 
-1. DevTools → Network → **Offline**.
-2. In the console, queue two additions against the newest observation id (replace `NEUESTE_ID`):
+1. The additions block sits **after** the observations loop and **before**
+   `return synced;`.
+2. Every path through the loop either `continue`s or reaches
+   `deleteArtNachtrag(n.tempId!)` — an entry that is neither deleted nor
+   skipped would be retried forever.
+3. Entries are deleted (not retried) when the target observation is gone and
+   when neither `vogelartId` nor `neuerName` is set.
+4. The insert only runs when the existence check returned nothing, and error
+   code `23505` is treated as success.
 
-```js
-const { saveArtNachtrag, getPendingCount } = await import("/src/lib/offlineDb.ts");
-```
+State each of these four as confirmed in the report, quoting the line that
+shows it. This is a reading check, not a substitute for Task 8.
 
-If that import path doesn't resolve in the dev server, defer this verification to Task 8, which drives the same path through the finished UI. Do not mark this step complete on a skipped check — note it and carry it to Task 8.
-
-3. Switch back **Online**, wait for `SyncStatus` to auto-sync, confirm the message appears and the pending count returns to 0.
-
-- [ ] **Step 5: Confirm a repeated sync creates no duplicates**
-
-In the console, run `syncOfflineData()` twice and confirm the row count is unchanged:
-
-```bash
-node scripts/verify-schnellzugabe.mjs
-```
-
-(That script is created in Task 8. If running this task first, record the count manually via the Supabase REST API.)
-
-- [ ] **Step 6: Typecheck and commit**
+- [ ] **Step 5: Typecheck and commit**
 
 ```bash
 npx tsc --noEmit
@@ -1429,6 +1478,24 @@ No gaps.
 
 `Snapshot`, `SnapshotBeobachtung`, `SnapshotArt`, `TopArt`, `ChipVorschlag`, `ZugabeErgebnis` are declared once in Task 1 and imported everywhere else. `chipsBerechnen`, `artHinzufuegen`, `snapshotAktualisieren`, `snapshotHolen`, `speicherSnapshot`, `ladeSnapshot`, `saveArtNachtrag`, `getArtNachtraege`, `deleteArtNachtrag` keep identical names and signatures across tasks. `ArtNachtrag` is defined in Task 2 and used in Tasks 4 and 5.
 
-**Known weak point**
+**Verification split**
 
-Task 5 Step 4 and Task 3 Step 2 depend on module paths that the dev server may not expose to the console. Both say to defer to Task 8 rather than mark a skipped check complete. Task 8 exercises the same paths through the finished UI and verifies against actual rows, so coverage does not depend on those console imports working.
+Implementer subagents cannot drive DevTools, so browser-dependent checks are
+separated from headless ones:
+
+- **Headless, done by the implementer:** `node` tests (Task 1), the query
+  check (Task 3), code-reading confirmations (Task 5), `npx tsc --noEmit`,
+  `npx next build`. These gate each task.
+- **Browser-dependent, done by the controller after Task 7:** the IndexedDB
+  upgrade (Task 2 Step 4), the mobile-viewport walkthrough (Task 7 Step 3),
+  and the full online/offline round trip with row verification (Task 8).
+
+A task whose browser check is deferred is still gated by its headless checks;
+the deferred item is named in the ledger and closed out in Task 8. No check is
+silently dropped.
+
+**Push discipline**
+
+Nothing is pushed until all eight tasks are complete. `master` auto-deploys,
+so an intermediate push would put a half-built FAB on the live site.
+Implementers commit locally and never run `git push`.
