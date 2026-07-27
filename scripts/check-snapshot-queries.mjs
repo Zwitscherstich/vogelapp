@@ -38,14 +38,25 @@ for (let von = 0; ; von += 500) {
 }
 
 console.log(`Verknuepfungen geladen: ${alle.length}`);
-if (alle.length <= 1000) {
+// Genau 1000 ist die Signatur der stillen PostgREST-Kappung. Weniger als 1000
+// ist bei einer kleinen Datenbank voellig normal und darf nicht fehlschlagen.
+if (alle.length === 1000) {
   console.error(
-    `WARNUNG: nur ${alle.length} Zeilen – bei genau 1000 waere das die stille Kappung`
+    "FEHLER: exakt 1000 Zeilen – das ist die Signatur der stillen Kappung, " +
+      "die Paginierung greift nicht"
   );
+  process.exit(1);
 }
 
 const ohneNamen = alle.filter((z) => !z.vogelarten?.name).length;
 console.log(`Zeilen ohne Artnamen: ${ohneNamen}`);
+if (ohneNamen > 0) {
+  console.error(
+    `FEHLER: ${ohneNamen} Verknuepfungen ohne Artnamen – die Einbettung ` +
+      "vogelarten(name) liefert nicht fuer alle Zeilen ein Ergebnis"
+  );
+  process.exit(1);
+}
 
 const proBeob = new Map();
 for (const z of alle) {
