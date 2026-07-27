@@ -31,7 +31,11 @@ export default function RootLayout({
       <body className="bg-stone-50 text-stone-900 min-h-screen">
         <Navigation />
         <SyncStatus />
-        <main className="max-w-4xl mx-auto px-4 py-6">{children}</main>
+        {/* pb-28 auf Mobil: Platz fuer den Schnellzugabe-FAB, damit er keine
+            Bedienelemente am Listenende verdeckt. */}
+        <main className="max-w-4xl mx-auto px-4 pt-6 pb-28 sm:pb-6">
+          {children}
+        </main>
         <EasterEgg />
         <SchnellZugabeFab />
         <ServiceWorkerRegistration />
