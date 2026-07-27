@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import {
   getOfflineBeobachtungen,
   deleteOfflineBeobachtung,
+  updateOfflineBeobachtung,
   getOfflineVogelarten,
   deleteOfflineVogelart,
   getArtNachtraege,
@@ -27,45 +28,108 @@ export async function syncOfflineData(): Promise<number> {
     try {
       // Zuerst neue Vogelarten anlegen und IDs sammeln
       const alleArtIds = [...beob.vogelartIds];
+      let artenUnvollstaendig = false;
 
-      for (const name of beob.neueVogelarten) {
-        // Prüfen ob die Art inzwischen existiert
-        const { data: existing } = await supabase
+      for (const rohName of beob.neueVogelarten) {
+        const name = rohName.trim();
+        if (!name) continue;
+
+        const { data: vorhanden, error: pruefFehler } = await supabase
           .from("vogelarten")
           .select("id")
           .eq("name", name)
+          .limit(1);
+
+        // Ohne verlaessliche Pruefung nichts anlegen: sonst entstuende ein
+        // Duplikat in den Stammdaten.
+        if (pruefFehler) {
+          artenUnvollstaendig = true;
+          break;
+        }
+
+        if (vorhanden && vorhanden.length > 0) {
+          alleArtIds.push(vorhanden[0].id);
+          continue;
+        }
+
+        const { data: neue, error: anlegeFehler } = await supabase
+          .from("vogelarten")
+          .insert({ name })
+          .select("id")
           .single();
 
-        if (existing) {
-          alleArtIds.push(existing.id);
-        } else {
-          const { data: neue, error } = await supabase
-            .from("vogelarten")
-            .insert({ name })
-            .select("id")
-            .single();
-          if (!error && neue) {
-            alleArtIds.push(neue.id);
-          }
+        if (anlegeFehler || !neue) {
+          artenUnvollstaendig = true;
+          break;
         }
+        alleArtIds.push(neue.id);
       }
 
-      // Beobachtung anlegen
-      const { data: beobachtung, error: beobError } = await supabase
-        .from("beobachtungen")
-        .insert({ datum: beob.datum, ort: beob.ort, land: beob.land })
-        .select("id")
-        .single();
+      // Konnte nicht jede Art aufgeloest werden, wird die Beobachtung NICHT
+      // angelegt. Sonst laege sie unvollstaendig auf dem Server, waehrend die
+      // lokale Kopie geloescht wuerde -- der Nutzer verlaere Arten, die er
+      // erfasst hat. Beim naechsten Durchlauf erneut versuchen.
+      if (artenUnvollstaendig) continue;
 
-      if (beobError) continue;
+      // Beobachtung anlegen -- oder die aus einem frueheren, nur halb
+      // gelungenen Versuch wiederverwenden.
+      let beobachtungId = beob.serverId ?? null;
+
+      if (beobachtungId === null) {
+        const { data: beobachtung, error: beobError } = await supabase
+          .from("beobachtungen")
+          .insert({ datum: beob.datum, ort: beob.ort, land: beob.land })
+          .select("id")
+          .single();
+
+        if (beobError || !beobachtung) continue;
+        beobachtungId = beobachtung.id;
+
+        // Sofort lokal vermerken: schlaegt das Verknuepfen gleich fehl, darf
+        // der naechste Versuch die Beobachtung nicht ein zweites Mal anlegen.
+        // (`?? undefined`: supabase-js liefert hier ungetypt `any`, wodurch
+        // TypeScript den deklarierten Typ `number | null` beibehaelt, obwohl
+        // an dieser Stelle laengst eine Zahl feststeht.)
+        await updateOfflineBeobachtung(beob.tempId!, {
+          serverId: beobachtungId ?? undefined,
+        });
+      }
 
       // Vogelarten verknüpfen
       if (alleArtIds.length > 0) {
-        const artEintraege = alleArtIds.map((vogelart_id) => ({
-          beobachtung_id: beobachtung.id,
-          vogelart_id,
-        }));
-        await supabase.from("beobachtung_vogelarten").insert(artEintraege);
+        // Nach dieser einen Beobachtung gefiltert, daher unkritisch klein.
+        const { data: schonDa, error: schonDaFehler } = await supabase
+          .from("beobachtung_vogelarten")
+          .select("vogelart_id")
+          .eq("beobachtung_id", beobachtungId);
+
+        if (schonDaFehler) continue;
+
+        const vorhandeneIds = new Set(
+          (schonDa ?? []).map((z) => z.vogelart_id)
+        );
+        const fehlende = alleArtIds.filter((id) => !vorhandeneIds.has(id));
+
+        if (fehlende.length > 0) {
+          const { error: verknuepfFehler } = await supabase
+            .from("beobachtung_vogelarten")
+            .insert(
+              fehlende.map((vogelart_id) => ({
+                beobachtung_id: beobachtungId,
+                vogelart_id,
+              }))
+            );
+
+          // Genau hier lag die stille Datenvernichtung: der Fehler wurde
+          // verworfen, die lokale Kopie trotzdem geloescht und der Eintrag als
+          // erledigt gezaehlt -- die Beobachtung lag ohne Arten auf dem Server.
+          if (
+            verknuepfFehler &&
+            (verknuepfFehler as { code?: string }).code !== "23505"
+          ) {
+            continue;
+          }
+        }
       }
 
       await deleteOfflineBeobachtung(beob.tempId!);

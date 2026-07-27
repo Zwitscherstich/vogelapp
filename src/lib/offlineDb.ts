@@ -120,6 +120,12 @@ export interface OfflineBeobachtung {
   vogelartIds: number[];
   // Neue Vogelart-Namen die erst noch angelegt werden müssen
   neueVogelarten: string[];
+  /**
+   * Id der bereits auf dem Server angelegten Beobachtung. Gesetzt, sobald das
+   * Anlegen geklappt hat, aber das Verknuepfen der Arten noch aussteht --
+   * damit ein Wiederholungslauf die Beobachtung nicht ein zweites Mal anlegt.
+   */
+  serverId?: number;
 }
 
 export async function saveOfflineBeobachtung(
@@ -142,6 +148,27 @@ export async function deleteOfflineBeobachtung(
   await doTransaction("offlineBeobachtungen", "readwrite", (store) =>
     store.delete(tempId)
   );
+}
+
+/** Ergaenzt einen bestehenden Warteschlangen-Eintrag, ohne ihn zu ersetzen. */
+export async function updateOfflineBeobachtung(
+  tempId: number,
+  aenderung: Partial<OfflineBeobachtung>
+): Promise<void> {
+  const db = await openDb();
+  const tx = db.transaction("offlineBeobachtungen", "readwrite");
+  const store = tx.objectStore("offlineBeobachtungen");
+  const vorhanden = await new Promise<OfflineBeobachtung | undefined>((resolve, reject) => {
+    const rq = store.get(tempId);
+    rq.onsuccess = () => resolve(rq.result);
+    rq.onerror = () => reject(rq.error);
+  });
+  if (!vorhanden) return;
+  store.put({ ...vorhanden, ...aenderung, tempId });
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
 }
 
 // --- Offline Vogelarten ---
