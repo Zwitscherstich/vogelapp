@@ -38,12 +38,19 @@ export async function artHinzufuegen(
     }
 
     // Vorab pruefen: die Datenbank hat moeglicherweise keinen Unique-Constraint
-    const { data: vorhanden } = await supabase
+    const { data: vorhanden, error: pruefFehler } = await supabase
       .from("beobachtung_vogelarten")
       .select("id")
       .eq("beobachtung_id", beobachtungId)
       .eq("vogelart_id", vogelartId)
       .limit(1);
+
+    // Ohne verlaesslichen Vorab-Check darf nicht eingefuegt werden: ohne
+    // Unique-Constraint wuerde ein Blind-Insert eine doppelte Verknuepfung
+    // erzeugen, die niemand bemerkt.
+    if (pruefFehler) {
+      return { status: "fehler", meldung: pruefFehler.message };
+    }
 
     if (vorhanden && vorhanden.length > 0) return { status: "vorhanden" };
 
@@ -71,11 +78,15 @@ async function artAnlegen(name: string): Promise<number | null> {
   const sauber = name.trim();
   if (!sauber) return null;
 
-  const { data: vorhanden } = await supabase
+  const { data: vorhanden, error: pruefFehler } = await supabase
     .from("vogelarten")
     .select("id")
     .eq("name", sauber)
     .limit(1);
+
+  // Bei fehlgeschlagener Pruefung keine neue Art anlegen – sonst entstuende
+  // ein Duplikat in den Stammdaten.
+  if (pruefFehler) return null;
 
   if (vorhanden && vorhanden.length > 0) return vorhanden[0].id;
 
