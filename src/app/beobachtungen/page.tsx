@@ -5,6 +5,7 @@ import { supabase, ladeAlleZeilen } from "@/lib/supabase";
 import BeobachtungBearbeiten from "@/components/BeobachtungBearbeiten";
 import ExcelImport from "@/components/ExcelImport";
 import { useOnlineStatus } from "@/lib/useOnlineStatus";
+import { snapshotAktualisieren } from "@/lib/schnellzugabeSnapshot";
 
 interface Beobachtung {
   id: number;
@@ -87,6 +88,9 @@ export default function BeobachtungenPage() {
 
     setBeobachtungen(ergebnisse);
     setLaden(false);
+
+    // Beilaeufig: die Daten sind ohnehin geladen, der FAB profitiert davon.
+    void snapshotAktualisieren();
   }, []);
 
   useEffect(() => {

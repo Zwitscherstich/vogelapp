@@ -4,6 +4,8 @@ import {
   deleteOfflineBeobachtung,
   getOfflineVogelarten,
   deleteOfflineVogelart,
+  getArtNachtraege,
+  deleteArtNachtrag,
 } from "./offlineDb";
 
 export async function syncOfflineData(): Promise<number> {
@@ -70,6 +72,74 @@ export async function syncOfflineData(): Promise<number> {
       synced++;
     } catch {
       // Bei Fehler diesen Eintrag überspringen und beim nächsten Mal erneut versuchen
+      continue;
+    }
+  }
+
+  // 3. Nachtraege aus der Schnellzugabe – bewusst zuletzt, damit sie auf
+  //    Beobachtungen zutreffen koennen, die gerade erst synchronisiert wurden.
+  const nachtraege = await getArtNachtraege();
+  for (const n of nachtraege) {
+    try {
+      let vogelartId = n.vogelartId ?? null;
+
+      if (vogelartId === null && n.neuerName) {
+        const name = n.neuerName.trim();
+        const { data: vorhandeneArt } = await supabase
+          .from("vogelarten")
+          .select("id")
+          .eq("name", name)
+          .limit(1);
+
+        if (vorhandeneArt && vorhandeneArt.length > 0) {
+          vogelartId = vorhandeneArt[0].id;
+        } else {
+          const { data: neueArt, error } = await supabase
+            .from("vogelarten")
+            .insert({ name })
+            .select("id")
+            .single();
+          if (error || !neueArt) continue;
+          vogelartId = neueArt.id;
+        }
+      }
+
+      if (vogelartId === null) {
+        // Weder Id noch Name: der Eintrag ist unbrauchbar, sonst bliebe er ewig.
+        await deleteArtNachtrag(n.tempId!);
+        continue;
+      }
+
+      // Existiert die Zielbeobachtung ueberhaupt noch?
+      const { data: zielBeob } = await supabase
+        .from("beobachtungen")
+        .select("id")
+        .eq("id", n.beobachtungId)
+        .limit(1);
+
+      if (!zielBeob || zielBeob.length === 0) {
+        await deleteArtNachtrag(n.tempId!);
+        continue;
+      }
+
+      const { data: schonDa } = await supabase
+        .from("beobachtung_vogelarten")
+        .select("id")
+        .eq("beobachtung_id", n.beobachtungId)
+        .eq("vogelart_id", vogelartId)
+        .limit(1);
+
+      if (!schonDa || schonDa.length === 0) {
+        const { error } = await supabase
+          .from("beobachtung_vogelarten")
+          .insert({ beobachtung_id: n.beobachtungId, vogelart_id: vogelartId });
+        // 23505 bedeutet: parallel bereits angelegt – ebenfalls erledigt.
+        if (error && (error as { code?: string }).code !== "23505") continue;
+      }
+
+      await deleteArtNachtrag(n.tempId!);
+      synced++;
+    } catch {
       continue;
     }
   }
