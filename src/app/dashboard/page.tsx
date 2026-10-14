@@ -44,6 +44,73 @@ const FARBEN = [
   "#ea580c", "#ca8a04", "#16a34a", "#2563eb", "#9333ea",
 ];
 
+/** Kfz-Kennzeichen → Anzeigename und ISO-3166 für die Flagge. */
+const LAND_INFO: Record<string, { name: string; iso: string }> = {
+  D: { name: "Deutschland", iso: "DE" },
+  A: { name: "Österreich", iso: "AT" },
+  CH: { name: "Schweiz", iso: "CH" },
+  NL: { name: "Niederlande", iso: "NL" },
+  B: { name: "Belgien", iso: "BE" },
+  L: { name: "Luxemburg", iso: "LU" },
+  F: { name: "Frankreich", iso: "FR" },
+  I: { name: "Italien", iso: "IT" },
+  E: { name: "Spanien", iso: "ES" },
+  P: { name: "Portugal", iso: "PT" },
+  GB: { name: "Großbritannien", iso: "GB" },
+  UK: { name: "Großbritannien", iso: "GB" },
+  IRL: { name: "Irland", iso: "IE" },
+  DK: { name: "Dänemark", iso: "DK" },
+  S: { name: "Schweden", iso: "SE" },
+  N: { name: "Norwegen", iso: "NO" },
+  FIN: { name: "Finnland", iso: "FI" },
+  PL: { name: "Polen", iso: "PL" },
+  CZ: { name: "Tschechien", iso: "CZ" },
+  SK: { name: "Slowakei", iso: "SK" },
+  H: { name: "Ungarn", iso: "HU" },
+  SLO: { name: "Slowenien", iso: "SI" },
+  HR: { name: "Kroatien", iso: "HR" },
+  GR: { name: "Griechenland", iso: "GR" },
+  RO: { name: "Rumänien", iso: "RO" },
+  BG: { name: "Bulgarien", iso: "BG" },
+  EST: { name: "Estland", iso: "EE" },
+  LV: { name: "Lettland", iso: "LV" },
+  LT: { name: "Litauen", iso: "LT" },
+  IS: { name: "Island", iso: "IS" },
+  TR: { name: "Türkei", iso: "TR" },
+  UA: { name: "Ukraine", iso: "UA" },
+  US: { name: "USA", iso: "US" },
+  USA: { name: "USA", iso: "US" },
+  CA: { name: "Kanada", iso: "CA" },
+  AU: { name: "Australien", iso: "AU" },
+  NZ: { name: "Neuseeland", iso: "NZ" },
+  ZA: { name: "Südafrika", iso: "ZA" },
+  KE: { name: "Kenia", iso: "KE" },
+  MA: { name: "Marokko", iso: "MA" },
+  TN: { name: "Tunesien", iso: "TN" },
+  EG: { name: "Ägypten", iso: "EG" },
+  IN: { name: "Indien", iso: "IN" },
+  CN: { name: "China", iso: "CN" },
+  JP: { name: "Japan", iso: "JP" },
+  BR: { name: "Brasilien", iso: "BR" },
+  AR: { name: "Argentinien", iso: "AR" },
+  CL: { name: "Chile", iso: "CL" },
+  PE: { name: "Peru", iso: "PE" },
+  CR: { name: "Costa Rica", iso: "CR" },
+  MX: { name: "Mexiko", iso: "MX" },
+};
+
+function landFlagge(iso: string): string {
+  return iso
+    .toUpperCase()
+    .replace(/./g, (c) => String.fromCodePoint(127397 + c.charCodeAt(0)));
+}
+
+function landAnzeige(code: string): { name: string; flagge: string } {
+  const info = LAND_INFO[code.toUpperCase()];
+  if (!info) return { name: code, flagge: "🌍" };
+  return { name: info.name, flagge: landFlagge(info.iso) };
+}
+
 export default function DashboardPage() {
   const [beobachtungen, setBeobachtungen] = useState<BeobachtungMitArten[]>([]);
   const [laden, setLaden] = useState(true);
@@ -126,6 +193,21 @@ export default function DashboardPage() {
     // Einzigartige Orte und Länder
     const orte = new Set(beobachtungen.map((b) => b.ort));
     const laender = new Set(beobachtungen.map((b) => b.land));
+
+    // Einzigartige Arten pro Land (gesichtete Vögel)
+    const artenProLand = new Map<string, Set<string>>();
+    for (const b of beobachtungen) {
+      const land = (b.land || "").trim() || "–";
+      const set = artenProLand.get(land) ?? new Set();
+      for (const art of b.vogelarten) set.add(art);
+      artenProLand.set(land, set);
+    }
+    const laenderArten = [...artenProLand.entries()]
+      .map(([land, arten]) => {
+        const { name, flagge } = landAnzeige(land);
+        return { land, name, flagge, arten: arten.size };
+      })
+      .sort((a, b) => b.arten - a.arten || a.name.localeCompare(b.name, "de"));
 
     // Erstes Sichtungsdatum pro Art (für Neuentdeckungen)
     const ersteSichtung = new Map<string, string>();
@@ -558,7 +640,7 @@ export default function DashboardPage() {
       wochentagDaten,
       durchschnittArten,
       produktivsterMonat,
-      laender: [...laender],
+      laenderArten,
       saisonDaten,
       alleMeilensteine,
       selten,
@@ -679,8 +761,32 @@ export default function DashboardPage() {
           wert={stats.gesamtLaender}
           icon="🌍"
           farbe="violet"
-          untertitel={stats.laender.sort().join(", ")}
         />
+      </div>
+
+      {/* Arten nach Land */}
+      <div className="bg-white border border-stone-200 rounded-xl p-5 shadow-sm">
+        <h2 className="font-semibold text-stone-800 mb-1">Arten nach Land</h2>
+        <p className="text-xs text-stone-400 mb-4">
+          Einzigartige gesichtete Vogelarten je Land
+        </p>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {stats.laenderArten.map((l) => (
+            <div
+              key={l.land}
+              className="bg-stone-50 border border-stone-200 rounded-lg p-4 text-center"
+            >
+              <p className="text-2xl mb-1" aria-hidden>
+                {l.flagge}
+              </p>
+              <p className="text-2xl font-bold text-stone-800">{l.arten}</p>
+              <p className="text-xs text-stone-500 mt-0.5">{l.name}</p>
+              {l.name !== l.land && (
+                <p className="text-[10px] text-stone-400">{l.land}</p>
+              )}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Motivations-Banner */}
