@@ -53,6 +53,10 @@ export default function BeobachtungFormular({
   const [vogelarten, setVogelarten] = useState<{ id: number; name: string }[]>(
     []
   );
+  // Namen der schon einmal beobachteten Vogelarten (fuer die #-Markierung)
+  const [beobachteteArten, setBeobachteteArten] = useState<Set<string>>(
+    new Set()
+  );
   const [ausgewaehlteArten, setAusgewaehlteArten] = useState<number[]>([]);
   // Names are tracked independently so they're available immediately (before vogelarten load)
   const [ausgewaehlteArtenNamen, setAusgewaehlteArtenNamen] = useState<string[]>(initialArten);
@@ -125,6 +129,47 @@ export default function BeobachtungFormular({
     ladeVogelarten();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [online, initialArten, initialisiert]);
+
+  // Schon einmal beobachtete Vogelarten laden - online aus Supabase, offline
+  // aus dem lokalen Cache. Bestimmt, welche Arten in der Liste ein "#" bekommen.
+  useEffect(() => {
+    async function ladeBeobachteteArten() {
+      if (online) {
+        try {
+          const zeilen = await ladeAlleZeilen<{
+            vogelarten: { name: string } | null;
+          }>((von, bis) =>
+            supabase
+              .from("beobachtung_vogelarten")
+              .select("id, vogelarten(name)")
+              .order("id")
+              .range(von, bis)
+          );
+          const namen = new Set<string>();
+          for (const z of zeilen) {
+            const name = (z.vogelarten as unknown as { name: string } | null)
+              ?.name;
+            if (name) namen.add(name);
+          }
+          setBeobachteteArten(namen);
+          try {
+            localStorage.setItem(
+              "vogeltagebuch-beobachtete-arten",
+              JSON.stringify([...namen])
+            );
+          } catch {}
+        } catch {}
+      } else {
+        try {
+          const cached = localStorage.getItem(
+            "vogeltagebuch-beobachtete-arten"
+          );
+          if (cached) setBeobachteteArten(new Set<string>(JSON.parse(cached)));
+        } catch {}
+      }
+    }
+    ladeBeobachteteArten();
+  }, [online]);
 
   // Bekannte Orte laden
   useEffect(() => {
@@ -412,6 +457,7 @@ export default function BeobachtungFormular({
                 }`}
               >
                 {istAusgewaehlt ? "✓ " : ""}
+                <span className="whitespace-pre">{beobachteteArten.has(art.name) ? "# " : "  "}</span>
                 {art.name}
               </button>
             );
